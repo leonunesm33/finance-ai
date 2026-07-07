@@ -1,0 +1,29 @@
+services:
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    command: gunicorn app.main:app --workers 4 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+    volumes: []
+    ports: []
+    environment:
+      ENVIRONMENT: production
+
+  worker:
+    volumes: []
+    environment:
+      ENVIRONMENT: production
+
+  beat:
+    volumes: []
+    environment:
+      ENVIRONMENT: production
+
+  web:
+    profiles: ["never"]
+
+  nginx:
+    volumes:
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./infra/nginx/ssl:/etc/nginx/ssl:ro
+      - ./apps/web/dist:/usr/share/nginx/html/dist:ro
