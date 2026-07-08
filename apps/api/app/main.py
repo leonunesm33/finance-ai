@@ -16,6 +16,7 @@ from app.routers import (
     dashboard,
     goals,
     health,
+    investments,
     open_finance,
     recurring,
     reports,
@@ -56,6 +57,7 @@ def create_app() -> FastAPI:
     app.include_router(goals.router, prefix="/api")
     app.include_router(reports.router, prefix="/api")
     app.include_router(calculators.router, prefix="/api")
+    app.include_router(investments.router, prefix="/api")
 
     return app
 
