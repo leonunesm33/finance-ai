@@ -2,6 +2,7 @@ import type { LucideIcon } from 'lucide-react'
 import {
   Activity,
   ArrowLeftRight,
+  BarChart3,
   Landmark,
   LayoutDashboard,
   MessageCircle,
@@ -20,6 +21,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Contas', path: '/accounts', icon: Landmark },
   { label: 'Transações', path: '/transactions', icon: ArrowLeftRight },
   { label: 'Metas', path: '/goals', icon: Target },
+  { label: 'Relatórios', path: '/reports', icon: BarChart3 },
   { label: 'Chat IA', path: '/chat', icon: MessageCircle },
   { label: 'Configurações', path: '/settings', icon: Settings },
   { label: 'Status da API', path: '/health', icon: Activity },

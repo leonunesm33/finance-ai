@@ -56,7 +56,7 @@ def _previous_period(start: dt.date, end: dt.date) -> tuple[dt.date, dt.date]:
     return prev_start, prev_end
 
 
-async def _sum_by_type(
+async def sum_by_type(
     db: AsyncSession, user_id, start: dt.date, end: dt.date, tx_type: str
 ) -> Decimal:
     total = await db.scalar(
@@ -86,7 +86,7 @@ async def _expenses_by_category(
     return {category_id: Decimal(amount) for category_id, amount in rows}
 
 
-async def _build_expenses_by_category(
+async def build_expenses_by_category(
     db: AsyncSession, user_id, start: dt.date, end: dt.date, total_expenses: Decimal
 ) -> list[ExpenseByCategory]:
     current = await _expenses_by_category(db, user_id, start, end)
@@ -122,7 +122,7 @@ async def _build_expenses_by_category(
     return items
 
 
-async def _daily_spending(db: AsyncSession, user_id, start: dt.date, end: dt.date) -> list[DailySpending]:
+async def daily_spending(db: AsyncSession, user_id, start: dt.date, end: dt.date) -> list[DailySpending]:
     rows = await db.execute(
         select(Transaction.date, Transaction.type, func.sum(Transaction.amount))
         .where(
@@ -263,8 +263,8 @@ async def build_dashboard_summary(
 ) -> DashboardSummaryResponse:
     start, end = resolve_period(period, date_from, date_to)
 
-    total_income = await _sum_by_type(db, user.id, start, end, "income")
-    total_expenses = await _sum_by_type(db, user.id, start, end, "expense")
+    total_income = await sum_by_type(db, user.id, start, end, "income")
+    total_expenses = await sum_by_type(db, user.id, start, end, "expense")
     net_balance = total_income - total_expenses
     savings_rate = float(net_balance / total_income) if total_income > 0 else 0.0
 
@@ -281,8 +281,8 @@ async def build_dashboard_summary(
         else:
             total_bank_balance += account.balance
 
-    expenses_by_category = await _build_expenses_by_category(db, user.id, start, end, total_expenses)
-    daily_spending = await _daily_spending(db, user.id, start, end)
+    expenses_by_category = await build_expenses_by_category(db, user.id, start, end, total_expenses)
+    daily_spending_points = await daily_spending(db, user.id, start, end)
 
     recent_result = await db.scalars(
         select(Transaction)
@@ -305,7 +305,7 @@ async def build_dashboard_summary(
         total_credit_limit=total_credit_limit,
         total_credit_available=total_credit_available,
         expenses_by_category=expenses_by_category,
-        daily_spending=daily_spending,
+        daily_spending=daily_spending_points,
         recent_transactions=recent_transactions,
         open_finance_accounts=open_finance_accounts,
         alerts=alerts,

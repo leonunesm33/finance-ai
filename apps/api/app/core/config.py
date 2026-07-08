@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str = ""
 
     # Admin seed
-    ADMIN_EMAIL: str = "admin@financeai.local"
+    ADMIN_EMAIL: str = "admin@financeai.app"
     ADMIN_PASSWORD: str = "troque-esta-senha"
 
 

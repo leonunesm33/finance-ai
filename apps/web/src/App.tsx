@@ -9,6 +9,7 @@ import { GoalsPage } from '@/pages/GoalsPage'
 import { HealthPage } from '@/pages/HealthPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
+import { ReportsPage } from '@/pages/ReportsPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 import { TransactionsPage } from '@/pages/TransactionsPage'
 
@@ -26,6 +27,7 @@ function App() {
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/chat" element={<ChatPage />} />
             <Route path="/goals" element={<GoalsPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
             <Route path="/health" element={<HealthPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

@@ -23,4 +23,4 @@ celery_app.conf.beat_schedule = {
     },
 }
 
-from app.tasks import pluggy_sync  # noqa: E402,F401
+from app.tasks import ai_analysis, pluggy_sync  # noqa: E402,F401
