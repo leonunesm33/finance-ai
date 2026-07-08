@@ -8,6 +8,7 @@ import { HomePage } from '@/pages/HomePage'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { SettingsPage } from '@/pages/SettingsPage'
+import { TransactionsPage } from '@/pages/TransactionsPage'
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
           <Route element={<AppLayout />}>
             <Route path="/" element={<HomePage />} />
             <Route path="/accounts" element={<AccountsPage />} />
+            <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/health" element={<HealthPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
