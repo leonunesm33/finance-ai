@@ -3,8 +3,8 @@ import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/components/shared/app-layout'
 import { ProtectedRoute } from '@/components/shared/protected-route'
 import { AccountsPage } from '@/pages/AccountsPage'
+import { DashboardPage } from '@/pages/DashboardPage'
 import { HealthPage } from '@/pages/HealthPage'
-import { HomePage } from '@/pages/HomePage'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
 import { SettingsPage } from '@/pages/SettingsPage'
@@ -19,7 +19,7 @@ function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route element={<AppLayout />}>
-            <Route path="/" element={<HomePage />} />
+            <Route path="/" element={<DashboardPage />} />
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/health" element={<HealthPage />} />

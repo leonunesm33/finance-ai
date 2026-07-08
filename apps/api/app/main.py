@@ -7,7 +7,17 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.logging import JSONLoggingMiddleware
 from app.core.redis import redis_client
-from app.routers import auth, bank_accounts, categories, health, open_finance, recurring, transactions, users
+from app.routers import (
+    auth,
+    bank_accounts,
+    categories,
+    dashboard,
+    health,
+    open_finance,
+    recurring,
+    transactions,
+    users,
+)
 
 
 @asynccontextmanager
@@ -37,6 +47,7 @@ def create_app() -> FastAPI:
     app.include_router(transactions.router, prefix="/api")
     app.include_router(categories.router, prefix="/api")
     app.include_router(recurring.router, prefix="/api")
+    app.include_router(dashboard.router, prefix="/api")
 
     return app
 
