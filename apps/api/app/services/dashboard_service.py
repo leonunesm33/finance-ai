@@ -167,7 +167,7 @@ async def _open_finance_accounts(db: AsyncSession, user_id) -> list[OpenFinanceA
     ]
 
 
-async def _build_alerts(db: AsyncSession, user_id) -> list[DashboardAlert]:
+async def build_alerts(db: AsyncSession, user_id) -> list[DashboardAlert]:
     alerts: list[DashboardAlert] = []
 
     error_connections = await db.scalars(
@@ -240,7 +240,7 @@ async def build_dashboard_summary(
     recent_transactions = list(recent_result.all())
 
     open_finance_accounts = await _open_finance_accounts(db, user.id)
-    alerts = await _build_alerts(db, user.id)
+    alerts = await build_alerts(db, user.id)
 
     return DashboardSummaryResponse(
         period=PeriodRange(start=start, end=end),

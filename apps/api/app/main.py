@@ -11,6 +11,7 @@ from app.routers import (
     auth,
     bank_accounts,
     categories,
+    chat,
     dashboard,
     health,
     open_finance,
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     app.include_router(categories.router, prefix="/api")
     app.include_router(recurring.router, prefix="/api")
     app.include_router(dashboard.router, prefix="/api")
+    app.include_router(chat.router, prefix="/api")
 
     return app
 

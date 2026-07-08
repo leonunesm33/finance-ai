@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Activity, ArrowLeftRight, Landmark, LayoutDashboard, Settings } from 'lucide-react'
+import { Activity, ArrowLeftRight, Landmark, LayoutDashboard, MessageCircle, Settings } from 'lucide-react'
 
 export interface NavItem {
   label: string
@@ -11,6 +11,7 @@ export const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
   { label: 'Contas', path: '/accounts', icon: Landmark },
   { label: 'Transações', path: '/transactions', icon: ArrowLeftRight },
+  { label: 'Chat IA', path: '/chat', icon: MessageCircle },
   { label: 'Configurações', path: '/settings', icon: Settings },
   { label: 'Status da API', path: '/health', icon: Activity },
 ]

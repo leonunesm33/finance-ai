@@ -1,4 +1,5 @@
 import json
+from collections.abc import AsyncIterator
 from datetime import date
 
 import anthropic
@@ -6,10 +7,27 @@ import anthropic
 from app.core.config import settings
 
 PARSE_MODEL = "claude-haiku-4-5-20251001"
+CHAT_MODEL = "claude-sonnet-5"
 
 
 class ClaudeParseError(Exception):
     pass
+
+
+async def stream_chat(system: str, messages: list[dict]) -> AsyncIterator[str]:
+    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+    try:
+        async with client.messages.stream(
+            model=CHAT_MODEL,
+            max_tokens=1500,
+            system=system,
+            messages=messages,
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
+    except anthropic.APIError as error:
+        yield f"\n\n_Erro ao consultar a IA: {error}_"
 
 
 async def parse_transaction_text(text: str, user_categories: list[str], user_personality: str) -> dict:

@@ -95,3 +95,29 @@
     @apply bg-background text-foreground;
   }
 }
+
+.chat-markdown p {
+  margin-bottom: 0.5rem;
+}
+.chat-markdown p:last-child {
+  margin-bottom: 0;
+}
+.chat-markdown ul,
+.chat-markdown ol {
+  margin: 0.25rem 0 0.5rem 1.25rem;
+}
+.chat-markdown ul {
+  list-style: disc;
+}
+.chat-markdown ol {
+  list-style: decimal;
+}
+.chat-markdown code {
+  background: color-mix(in oklch, currentColor 12%, transparent);
+  border-radius: 0.25rem;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.85em;
+}
+.chat-markdown strong {
+  font-weight: 600;
+}
