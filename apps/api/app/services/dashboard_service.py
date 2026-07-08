@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.bank_account import BankAccount
 from app.models.bank_connection import BankConnection
 from app.models.category import Category
+from app.models.goal import Goal
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.dashboard import (
@@ -199,9 +200,61 @@ async def build_alerts(db: AsyncSession, user_id) -> list[DashboardAlert]:
                 )
             )
 
-    # Alertas de orçamento (>80% da meta) chegam no Módulo 7, quando o
-    # modelo Goal existir.
+    alerts.extend(await _budget_alerts(db, user_id))
+    alerts.extend(await _anomaly_alerts(db, user_id))
 
+    return alerts
+
+
+async def _budget_alerts(db: AsyncSession, user_id) -> list[DashboardAlert]:
+    from app.services.goal_service import calculate_current_amount  # evita import circular no nível de módulo
+
+    alerts: list[DashboardAlert] = []
+    goals = await db.scalars(
+        select(Goal).where(Goal.user_id == user_id, Goal.is_active.is_(True), Goal.type == "expense_limit")
+    )
+    for goal in goals:
+        if goal.target_amount <= 0:
+            continue
+        current = await calculate_current_amount(db, goal)
+        ratio = current / goal.target_amount
+        if ratio >= Decimal("0.8"):
+            alerts.append(
+                DashboardAlert(
+                    type="budget_warning", message=f"{goal.name} atingiu {round(float(ratio * 100))}% do orçamento"
+                )
+            )
+    return alerts
+
+
+async def _anomaly_alerts(db: AsyncSession, user_id) -> list[DashboardAlert]:
+    today = dt.date.today()
+    recent_start = today - dt.timedelta(days=7)
+
+    avg_rows = await db.execute(
+        select(Transaction.category_id, func.avg(Transaction.amount), func.count(Transaction.id))
+        .where(Transaction.user_id == user_id, Transaction.type == "expense")
+        .group_by(Transaction.category_id)
+    )
+    avg_by_category = {category_id: Decimal(avg) for category_id, avg, count in avg_rows if count >= 3}
+
+    alerts: list[DashboardAlert] = []
+    recent_transactions = await db.scalars(
+        select(Transaction).where(
+            Transaction.user_id == user_id,
+            Transaction.type == "expense",
+            Transaction.date >= recent_start,
+        )
+    )
+    for tx in recent_transactions:
+        avg = avg_by_category.get(tx.category_id)
+        if avg and avg > 0 and tx.amount >= avg * ANOMALY_MULTIPLIER:
+            alerts.append(
+                DashboardAlert(
+                    type="anomaly",
+                    message=f"'{tx.description}' ({tx.amount}) está {ANOMALY_MULTIPLIER}x acima da média da categoria",
+                )
+            )
     return alerts
 
 

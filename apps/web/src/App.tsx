@@ -5,6 +5,7 @@ import { ProtectedRoute } from '@/components/shared/protected-route'
 import { AccountsPage } from '@/pages/AccountsPage'
 import { ChatPage } from '@/pages/ChatPage'
 import { DashboardPage } from '@/pages/DashboardPage'
+import { GoalsPage } from '@/pages/GoalsPage'
 import { HealthPage } from '@/pages/HealthPage'
 import { LoginPage } from '@/pages/LoginPage'
 import { RegisterPage } from '@/pages/RegisterPage'
@@ -24,6 +25,7 @@ function App() {
             <Route path="/accounts" element={<AccountsPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
             <Route path="/chat" element={<ChatPage />} />
+            <Route path="/goals" element={<GoalsPage />} />
             <Route path="/health" element={<HealthPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>

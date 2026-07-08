@@ -15,6 +15,7 @@ from app.models.chat import ChatConversation, ChatMessage
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.services.dashboard_service import build_alerts
+from app.services.goal_service import get_goals_progress
 
 PERSONALITY_PROMPTS = {
     "neutro": "Você responde de forma objetiva e direta, sem julgamentos.",
@@ -70,6 +71,7 @@ async def build_financial_context(db: AsyncSession, user: User, period_days: int
     )
 
     alerts = await build_alerts(db, user.id)
+    goals_progress = await get_goals_progress(db, user)
 
     return {
         "current_date": dt.date.today().isoformat(),
@@ -78,8 +80,15 @@ async def build_financial_context(db: AsyncSession, user: User, period_days: int
         "period_expenses_by_category": period_expenses_by_category,
         "period_income_total": period_income_total,
         "period_expense_total": period_expense_total,
-        # Metas ativas chegam no Módulo 7, quando o model Goal existir.
-        "active_goals": [],
+        "active_goals": [
+            {
+                "name": g.name,
+                "target_amount": float(g.target_amount),
+                "current_amount": float(g.current_amount),
+                "percentage": g.percentage,
+            }
+            for g in goals_progress
+        ],
         "recent_alerts": [a.message for a in alerts],
     }
 
