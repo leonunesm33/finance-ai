@@ -10,6 +10,7 @@ from app.core.redis import redis_client
 from app.routers import (
     auth,
     bank_accounts,
+    calculators,
     categories,
     chat,
     dashboard,
@@ -54,6 +55,7 @@ def create_app() -> FastAPI:
     app.include_router(chat.router, prefix="/api")
     app.include_router(goals.router, prefix="/api")
     app.include_router(reports.router, prefix="/api")
+    app.include_router(calculators.router, prefix="/api")
 
     return app
 
