@@ -7,7 +7,7 @@ from app.core.config import settings
 from app.core.database import engine
 from app.core.logging import JSONLoggingMiddleware
 from app.core.redis import redis_client
-from app.routers import health
+from app.routers import auth, bank_accounts, health, open_finance, users
 
 
 @asynccontextmanager
@@ -30,6 +30,10 @@ def create_app() -> FastAPI:
     app.add_middleware(JSONLoggingMiddleware)
 
     app.include_router(health.router, prefix="/api")
+    app.include_router(auth.router, prefix="/api")
+    app.include_router(users.router, prefix="/api")
+    app.include_router(open_finance.router, prefix="/api")
+    app.include_router(bank_accounts.router, prefix="/api")
 
     return app
 

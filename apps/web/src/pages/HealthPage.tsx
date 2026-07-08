@@ -32,7 +32,7 @@ export function HealthPage() {
   })
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
+    <div className="flex items-center justify-center py-12">
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>FinanceAI — Status da API</CardTitle>

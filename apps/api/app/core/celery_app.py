@@ -16,4 +16,11 @@ celery_app.conf.update(
     enable_utc=True,
 )
 
-celery_app.conf.beat_schedule = {}
+celery_app.conf.beat_schedule = {
+    "sync-all-connections": {
+        "task": "pluggy.sync_all_connections",
+        "schedule": settings.SYNC_INTERVAL_HOURS * 3600,
+    },
+}
+
+from app.tasks import pluggy_sync  # noqa: E402,F401
