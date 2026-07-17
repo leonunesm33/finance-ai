@@ -35,12 +35,18 @@ async def register_item(
 
 @router.post("/webhook", status_code=status.HTTP_204_NO_CONTENT)
 async def pluggy_webhook(request: Request, x_pluggy_signature: str | None = Header(default=None)):
+    # Fail-closed: sem segredo configurado não há como autenticar o webhook — não processar nada.
+    if not settings.PLUGGY_WEBHOOK_SECRET:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Webhook indisponível: segredo não configurado",
+        )
+
     body = await request.body()
 
-    if settings.PLUGGY_WEBHOOK_SECRET:
-        expected = hmac.new(settings.PLUGGY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-        if not x_pluggy_signature or not hmac.compare_digest(expected, x_pluggy_signature):
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida")
+    expected = hmac.new(settings.PLUGGY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+    if not x_pluggy_signature or not hmac.compare_digest(expected, x_pluggy_signature):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida")
 
     payload = await request.json()
     item_id = payload.get("itemId")

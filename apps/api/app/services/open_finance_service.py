@@ -1,3 +1,4 @@
+import logging
 import uuid
 from decimal import Decimal
 
@@ -11,13 +12,17 @@ from app.models.bank_connection import BankConnection
 from app.models.user import User
 from app.schemas.open_finance import BankAccountsSummary
 
+logger = logging.getLogger(__name__)
+
 
 async def create_connect_token() -> str:
     try:
         data = await pluggy_client.create_connect_token()
-    except PluggyError as error:
+    except PluggyError:
+        logger.exception("Falha ao gerar connect token no Pluggy")
         raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Não foi possível gerar o connect token: {error}"
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Não foi possível gerar o connect token. Tente novamente mais tarde.",
         )
     return data["accessToken"]
 
@@ -25,12 +30,20 @@ async def create_connect_token() -> str:
 async def register_connection(db: AsyncSession, user: User, item_id: str) -> BankConnection:
     existing = await db.scalar(select(BankConnection).where(BankConnection.pluggy_item_id == item_id))
     if existing is not None:
+        if existing.user_id != user.id:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="Item já vinculado a outra conta"
+            )
         return existing
 
     try:
         item = await pluggy_client.get_item(item_id)
-    except PluggyError as error:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Item Pluggy inválido: {error}")
+    except PluggyError:
+        logger.exception("Falha ao consultar item %s no Pluggy", item_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Não foi possível validar o item no Pluggy. Tente novamente mais tarde.",
+        )
 
     connector = item.get("connector", {})
     connection = BankConnection(

@@ -12,16 +12,22 @@ class LoginRequest(BaseModel):
 
 
 class RefreshRequest(BaseModel):
-    refresh_token: str
+    """O refresh token é lido preferencialmente do cookie httpOnly.
+
+    O campo no body é opcional, mantido apenas como fallback de compatibilidade.
+    """
+
+    refresh_token: str | None = None
 
 
 class LogoutRequest(BaseModel):
-    refresh_token: str
+    refresh_token: str | None = None
 
 
 class TokenResponse(BaseModel):
+    """O refresh token NÃO trafega mais no body: é entregue via cookie httpOnly."""
+
     access_token: str
-    refresh_token: str
     token_type: str = "bearer"
 
 

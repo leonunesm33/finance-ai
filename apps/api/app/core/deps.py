@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
@@ -35,7 +37,12 @@ async def get_current_user(
     if user_id is None:
         raise credentials_exception
 
-    user = await db.get(User, user_id)
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+    except (ValueError, TypeError):
+        raise credentials_exception
+
+    user = await db.get(User, user_uuid)
     if user is None or not user.is_active:
         raise credentials_exception
 

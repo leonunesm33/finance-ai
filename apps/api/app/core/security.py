@@ -35,4 +35,10 @@ def create_refresh_token(user_id: str) -> tuple[str, str, datetime]:
 
 
 def decode_token(token: str) -> dict:
-    return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+    return jwt.decode(
+        token,
+        settings.SECRET_KEY,
+        algorithms=[ALGORITHM],
+        # python-jose usa flags "require_*" (o equivalente ao {"require": ["exp", "sub"]} do PyJWT)
+        options={"require_exp": True, "require_sub": True},
+    )

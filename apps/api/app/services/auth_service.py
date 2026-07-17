@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
@@ -49,7 +50,12 @@ def issue_tokens(user: User) -> tuple[str, str]:
     return access_token, refresh_token
 
 
-async def refresh_access_token(db: AsyncSession, refresh_token: str) -> str:
+async def refresh_access_token(db: AsyncSession, refresh_token: str) -> tuple[str, str]:
+    """Valida o refresh token e emite um novo par (access, refresh), com rotação.
+
+    O refresh token antigo é colocado na blacklist (uso único): se vazar,
+    não pode mais ser reutilizado após o próximo refresh legítimo.
+    """
     invalid_token_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token inválido"
     )
@@ -68,17 +74,26 @@ async def refresh_access_token(db: AsyncSession, refresh_token: str) -> str:
     if jti is None or user_id is None or issued_at is None:
         raise invalid_token_exception
 
+    try:
+        user_uuid = uuid.UUID(str(user_id))
+        issued_at = int(issued_at)
+    except (ValueError, TypeError):
+        raise invalid_token_exception
+
     if await redis_client.exists(f"{BLACKLIST_KEY_PREFIX}{jti}"):
         raise invalid_token_exception
 
-    user = await db.get(User, user_id)
+    user = await db.get(User, user_uuid)
     if user is None or not user.is_active:
         raise invalid_token_exception
 
-    if user.password_changed_at is not None and issued_at < user.password_changed_at.timestamp():
+    if user.password_changed_at is not None and issued_at < int(user.password_changed_at.timestamp()):
         raise invalid_token_exception
 
-    return create_access_token(str(user.id))
+    # Rotação: invalida o token usado e emite um novo par.
+    await revoke_refresh_token(refresh_token)
+    new_access_token, new_refresh_token = issue_tokens(user)
+    return new_access_token, new_refresh_token
 
 
 async def revoke_refresh_token(refresh_token: str) -> None:

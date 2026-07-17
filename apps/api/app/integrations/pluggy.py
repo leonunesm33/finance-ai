@@ -1,10 +1,19 @@
+import asyncio
+import logging
+import time
 from datetime import date
 
 import httpx
 
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 PLUGGY_BASE_URL = "https://api.pluggy.ai"
+
+# A API key do Pluggy vale 2 horas; renovamos com 5 minutos de margem.
+API_KEY_TTL_SECONDS = 2 * 60 * 60
+API_KEY_RENEW_MARGIN_SECONDS = 5 * 60
 
 
 class PluggyError(Exception):
@@ -19,37 +28,64 @@ class PluggyClient:
 
     def __init__(self) -> None:
         self._api_key: str | None = None
+        self._api_key_expires_at: float = 0.0
+        self._auth_lock = asyncio.Lock()
 
     async def _request(self, method: str, path: str, **kwargs) -> dict:
-        api_key = await self._get_api_key()
-        headers = {**kwargs.pop("headers", {}), "X-API-KEY": api_key}
+        response = await self._send(method, path, **kwargs)
 
-        async with httpx.AsyncClient(base_url=PLUGGY_BASE_URL, timeout=15.0) as client:
-            response = await client.request(method, path, headers=headers, **kwargs)
+        # API key expirada/revogada no lado do Pluggy: invalida o cache e tenta 1 vez.
+        if response.status_code in (401, 403):
+            self._invalidate_api_key()
+            response = await self._send(method, path, **kwargs)
 
         if response.status_code >= 400:
-            raise PluggyError(f"Pluggy API error {response.status_code}: {response.text}")
+            logger.error(
+                "Pluggy API error: %s %s -> %s: %s", method, path, response.status_code, response.text
+            )
+            raise PluggyError(f"Pluggy API error {response.status_code}")
 
+        if response.status_code == 204 or not response.content:
+            return {}
         return response.json()
 
-    async def _get_api_key(self) -> str:
-        if self._api_key is not None:
-            return self._api_key
+    async def _send(self, method: str, path: str, **kwargs) -> httpx.Response:
+        api_key = await self._get_api_key()
+        headers = {**kwargs.get("headers", {}), "X-API-KEY": api_key}
+        request_kwargs = {k: v for k, v in kwargs.items() if k != "headers"}
 
         async with httpx.AsyncClient(base_url=PLUGGY_BASE_URL, timeout=15.0) as client:
-            response = await client.post(
-                "/auth",
-                json={
-                    "clientId": settings.PLUGGY_CLIENT_ID,
-                    "clientSecret": settings.PLUGGY_CLIENT_SECRET,
-                },
-            )
+            return await client.request(method, path, headers=headers, **request_kwargs)
 
-        if response.status_code >= 400:
-            raise PluggyError(f"Falha ao autenticar no Pluggy: {response.text}")
+    def _invalidate_api_key(self) -> None:
+        self._api_key = None
+        self._api_key_expires_at = 0.0
 
-        self._api_key = response.json()["apiKey"]
-        return self._api_key
+    async def _get_api_key(self) -> str:
+        if self._api_key is not None and time.monotonic() < self._api_key_expires_at:
+            return self._api_key
+
+        async with self._auth_lock:
+            # Outra corrotina pode ter renovado enquanto aguardávamos o lock.
+            if self._api_key is not None and time.monotonic() < self._api_key_expires_at:
+                return self._api_key
+
+            async with httpx.AsyncClient(base_url=PLUGGY_BASE_URL, timeout=15.0) as client:
+                response = await client.post(
+                    "/auth",
+                    json={
+                        "clientId": settings.PLUGGY_CLIENT_ID,
+                        "clientSecret": settings.PLUGGY_CLIENT_SECRET,
+                    },
+                )
+
+            if response.status_code >= 400:
+                logger.error("Falha ao autenticar no Pluggy: %s: %s", response.status_code, response.text)
+                raise PluggyError(f"Falha ao autenticar no Pluggy (HTTP {response.status_code})")
+
+            self._api_key = response.json()["apiKey"]
+            self._api_key_expires_at = time.monotonic() + API_KEY_TTL_SECONDS - API_KEY_RENEW_MARGIN_SECONDS
+            return self._api_key
 
     async def create_connect_token(self, item_id: str | None = None) -> dict:
         body: dict = {}

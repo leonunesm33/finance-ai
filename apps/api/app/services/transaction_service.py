@@ -12,6 +12,7 @@ from app.integrations.claude import ClaudeParseError, parse_transaction_text
 from app.models.category import Category
 from app.models.transaction import Transaction
 from app.models.user import User
+from app.services.ownership import validate_owned_account, validate_owned_category
 from app.schemas.transaction import (
     CsvImportResult,
     TransactionCreate,
@@ -74,6 +75,9 @@ async def get_owned_transaction(db: AsyncSession, user: User, transaction_id: uu
 
 
 async def create_transaction(db: AsyncSession, user: User, data: TransactionCreate) -> Transaction:
+    await validate_owned_category(db, user, data.category_id)
+    await validate_owned_account(db, user, data.account_id)
+
     transaction = Transaction(user_id=user.id, origin="manual", **data.model_dump())
     db.add(transaction)
     await db.commit()
@@ -85,7 +89,14 @@ async def update_transaction(
     db: AsyncSession, user: User, transaction_id: uuid.UUID, data: TransactionUpdate
 ) -> Transaction:
     transaction = await get_owned_transaction(db, user, transaction_id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+
+    if "category_id" in changes:
+        await validate_owned_category(db, user, changes["category_id"])
+    if "account_id" in changes:
+        await validate_owned_account(db, user, changes["account_id"])
+
+    for field, value in changes.items():
         setattr(transaction, field, value)
     await db.commit()
     await db.refresh(transaction)
@@ -108,25 +119,31 @@ async def parse_transaction(db: AsyncSession, user: User, text: str) -> Transact
     category_names = [c.name for c in category_list]
 
     try:
-        raw = await parse_transaction_text(text, category_names, user.ai_personality)
-    except ClaudeParseError as error:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY, detail=f"Não foi possível interpretar o texto: {error}"
+        parsed = await parse_transaction_text(text, category_names, user.ai_personality)
+
+        category_by_name = {c.name.lower(): c for c in category_list}
+        matched = category_by_name.get((parsed.category_name or "").lower())
+
+        return TransactionParseResponse(
+            description=parsed.description,
+            amount=parsed.amount,
+            type=parsed.type,
+            category_id=matched.id if matched else None,
+            category_name=matched.name if matched else parsed.category_name,
+            date=parsed.date,
+            confidence=parsed.confidence,
+            alternatives=[a.model_dump() for a in parsed.alternatives],
         )
-
-    category_by_name = {c.name.lower(): c for c in category_list}
-    matched = category_by_name.get((raw.get("category_name") or "").lower())
-
-    return TransactionParseResponse(
-        description=raw["description"],
-        amount=Decimal(str(raw["amount"])),
-        type=raw["type"],
-        category_id=matched.id if matched else None,
-        category_name=matched.name if matched else raw.get("category_name"),
-        date=raw["date"],
-        confidence=raw.get("confidence", 0.5),
-        alternatives=raw.get("alternatives", []),
-    )
+    except ClaudeParseError:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Não foi possível interpretar o texto. Tente reformular a frase.",
+        )
+    except (KeyError, ValueError, InvalidOperation, TypeError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="A resposta da IA veio em um formato inesperado. Tente novamente.",
+        )
 
 
 async def import_csv(

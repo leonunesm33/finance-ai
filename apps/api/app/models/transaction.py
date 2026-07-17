@@ -15,6 +15,7 @@ class Transaction(Base):
     __table_args__ = (
         Index("ix_transactions_user_id_date", "user_id", "date"),
         Index("ix_transactions_user_id_category_id", "user_id", "category_id"),
+        Index("ix_transactions_user_id_type_date", "user_id", "type", "date"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

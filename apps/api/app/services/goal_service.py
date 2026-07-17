@@ -10,6 +10,7 @@ from app.models.goal import Goal
 from app.models.transaction import Transaction
 from app.models.user import User
 from app.schemas.goal import GoalCreate, GoalProgress, GoalUpdate
+from app.services.ownership import validate_owned_category
 
 
 def _goal_period_range(goal: Goal) -> tuple[dt.date, dt.date]:
@@ -71,13 +72,19 @@ async def _refresh_current_amount(db: AsyncSession, goal: Goal) -> Goal:
 
 
 async def list_goals(db: AsyncSession, user: User) -> list[Goal]:
+    """Lista metas com current_amount calculado on-the-fly, SEM persistir (é um GET).
+
+    Os objetos são desanexados da sessão (expunge) após receberem o valor calculado,
+    para que um commit posterior na mesma sessão não grave o valor no banco.
+    """
     result = await db.scalars(
         select(Goal).where(Goal.user_id == user.id, Goal.is_active.is_(True)).order_by(Goal.name)
     )
     goals = list(result.all())
     for goal in goals:
-        await _refresh_current_amount(db, goal)
-    await db.commit()
+        current = await calculate_current_amount(db, goal)
+        db.expunge(goal)
+        goal.current_amount = current
     return goals
 
 
@@ -100,6 +107,7 @@ async def get_goals_progress(db: AsyncSession, user: User) -> list[GoalProgress]
 
 
 async def create_goal(db: AsyncSession, user: User, data: GoalCreate) -> Goal:
+    await validate_owned_category(db, user, data.category_id)
     goal = Goal(user_id=user.id, **data.model_dump())
     db.add(goal)
     await db.commit()
@@ -118,7 +126,10 @@ async def get_owned_goal(db: AsyncSession, user: User, goal_id: uuid.UUID) -> Go
 
 async def update_goal(db: AsyncSession, user: User, goal_id: uuid.UUID, data: GoalUpdate) -> Goal:
     goal = await get_owned_goal(db, user, goal_id)
-    for field, value in data.model_dump(exclude_unset=True).items():
+    changes = data.model_dump(exclude_unset=True)
+    if "category_id" in changes:
+        await validate_owned_category(db, user, changes["category_id"])
+    for field, value in changes.items():
         setattr(goal, field, value)
     await db.commit()
     await db.refresh(goal)

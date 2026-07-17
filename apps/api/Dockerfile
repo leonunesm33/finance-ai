@@ -15,7 +15,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY . .
+# Usuário não-root (UID 1000 casa com o dono do bind mount em dev)
+RUN useradd --uid 1000 --create-home --shell /usr/sbin/nologin app
+
+COPY --chown=app:app . .
+
+USER app
 
 EXPOSE 8000
 
