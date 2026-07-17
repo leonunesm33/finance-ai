@@ -104,12 +104,32 @@ class PluggyClient:
         return data.get("results", [])
 
     async def get_transactions(self, account_id: str, from_date: date) -> list[dict]:
-        data = await self._request(
-            "GET",
-            "/transactions",
-            params={"accountId": account_id, "from": from_date.isoformat(), "pageSize": 500},
-        )
-        return data.get("results", [])
+        """Lista transações via GET /v2/transactions (o v1 foi descontinuado — 410).
+
+        O v2 pagina pelo campo `next` da resposta (URL completa da próxima página)
+        e não aceita filtro pela data da transação, então o corte por `from_date`
+        é aplicado aqui, client-side.
+        """
+        results: list[dict] = []
+        path = "/v2/transactions"
+        params: dict | None = {"accountId": account_id}
+
+        for _ in range(100):  # trava de segurança contra paginação infinita
+            data = await self._request("GET", path, params=params)
+            results.extend(data.get("results", []))
+
+            next_ref = data.get("next")
+            if not next_ref:
+                break
+            if isinstance(next_ref, str) and next_ref.startswith("http"):
+                # httpx ignora base_url quando a URL é absoluta; a query já vem embutida
+                path, params = next_ref, None
+            else:
+                logger.warning("Formato de cursor inesperado em /v2/transactions: %r", next_ref)
+                break
+
+        cutoff = from_date.isoformat()
+        return [t for t in results if str(t.get("date", ""))[:10] >= cutoff]
 
 
 pluggy_client = PluggyClient()

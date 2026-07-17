@@ -5,7 +5,7 @@ from decimal import Decimal
 from sqlalchemy import select
 
 from app.core.celery_app import celery_app
-from app.core.database import async_session_factory
+from app.core.database import task_session
 from app.integrations.pluggy import PluggyError, pluggy_client
 from app.models.bank_account import BankAccount
 from app.models.bank_connection import BankConnection
@@ -61,7 +61,7 @@ async def _sync_account_transactions(db, user_id, account: BankAccount) -> None:
 
 
 async def _sync_connection(connection_id: str) -> None:
-    async with async_session_factory() as db:
+    async with task_session() as db:
         connection = await db.get(BankConnection, connection_id)
         if connection is None or not connection.is_active:
             return
@@ -127,7 +127,7 @@ def sync_connection(connection_id: str) -> None:
 
 
 async def _sync_all_connections() -> list[str]:
-    async with async_session_factory() as db:
+    async with task_session() as db:
         result = await db.scalars(select(BankConnection.id).where(BankConnection.is_active.is_(True)))
         return [str(row) for row in result.all()]
 

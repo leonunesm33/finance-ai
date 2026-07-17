@@ -6,7 +6,7 @@ import anthropic
 
 from app.core.celery_app import celery_app
 from app.core.config import settings
-from app.core.database import async_session_factory
+from app.core.database import task_session
 from app.models.user import User
 from app.services import goal_service
 from app.services.dashboard_service import build_alerts, build_expenses_by_category, sum_by_type
@@ -20,7 +20,7 @@ nunca invente números. Formate valores sempre em R$ com duas casas decimais."""
 
 
 async def _build_analysis_context(user_id: str, period_start: dt.date, period_end: dt.date) -> dict:
-    async with async_session_factory() as db:
+    async with task_session() as db:
         user = await db.get(User, user_id)
 
         total_income = await sum_by_type(db, user.id, period_start, period_end, "income")

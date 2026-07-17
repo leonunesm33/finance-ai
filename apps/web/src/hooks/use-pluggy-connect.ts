@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 
-const SCRIPT_SRC = 'https://cdn.pluggy.ai/pluggy-connect/v2/pluggy-connect.js'
+const SCRIPT_SRC = 'https://cdn.pluggy.ai/pluggy-connect/latest/pluggy-connect.js'
 const SCRIPT_LOAD_TIMEOUT_MS = 15_000
 
 // Sandbox só quando habilitado explicitamente por env (default: false).
