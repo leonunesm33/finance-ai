@@ -2,16 +2,13 @@ import asyncio
 import datetime as dt
 import json
 
-import anthropic
-
 from app.core.celery_app import celery_app
 from app.core.config import settings
 from app.core.database import task_session
+from app.integrations.ai import get_ai_client
 from app.models.user import User
 from app.services import goal_service
 from app.services.dashboard_service import build_alerts, build_expenses_by_category, sum_by_type
-
-ANALYSIS_MODEL = "claude-sonnet-5"
 
 ANALYSIS_SYSTEM_PROMPT = """Você é um analista financeiro pessoal. Gere uma análise narrativa
 personalizada em markdown com exatamente estas seções: ## Resumo, ## Destaques,
@@ -50,14 +47,12 @@ async def _run_analysis(user_id: str, period_start: str, period_end: str) -> str
         user_id, dt.date.fromisoformat(period_start), dt.date.fromisoformat(period_end)
     )
 
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-    message = await client.messages.create(
-        model=ANALYSIS_MODEL,
+    return await get_ai_client().complete(
+        ANALYSIS_SYSTEM_PROMPT,
+        json.dumps(context, ensure_ascii=False),
+        model=settings.AI_ANALYSIS_MODEL,
         max_tokens=4096,
-        system=ANALYSIS_SYSTEM_PROMPT,
-        messages=[{"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
     )
-    return message.content[0].text if message.content else ""
 
 
 @celery_app.task(name="reports.generate_ai_analysis")

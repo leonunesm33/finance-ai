@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Landmark, Loader2, Plug, RefreshCw, Trash2 } from 'lucide-react'
+import { FileUp, Landmark, Loader2, Plug, RefreshCw, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { EmptyState } from '@/components/shared/empty-state'
@@ -11,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { useConfig } from '@/hooks/use-config'
 import { usePluggyConnect } from '@/hooks/use-pluggy-connect'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
@@ -47,10 +49,20 @@ async function fetchSummary() {
 export function AccountsPage() {
   const queryClient = useQueryClient()
   const { toast } = useToast()
+  const navigate = useNavigate()
   const { open: openPluggyWidget, loading: widgetLoading } = usePluggyConnect()
   const [connectionToRemove, setConnectionToRemove] = useState<BankConnection | null>(null)
 
-  const connectionsQuery = useQuery({ queryKey: ['open-finance', 'connections'], queryFn: fetchConnections })
+  const { data: config } = useConfig()
+  // Enquanto o /config não responde, tratamos como desligado para não exibir CTAs que dariam 503.
+  const openFinanceEnabled = config?.open_finance_enabled ?? false
+
+  const connectionsQuery = useQuery({
+    queryKey: ['open-finance', 'connections'],
+    queryFn: fetchConnections,
+    // Com a flag desligada o endpoint responde 503 — nem consultamos.
+    enabled: openFinanceEnabled,
+  })
   const accountsQuery = useQuery({ queryKey: ['bank-accounts'], queryFn: fetchAccounts })
   const summaryQuery = useQuery({ queryKey: ['bank-accounts', 'summary'], queryFn: fetchSummary })
 
@@ -125,10 +137,12 @@ export function AccountsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <h1 className="font-display text-2xl font-medium tracking-tight">Contas</h1>
-        <Button onClick={handleConnectBank} disabled={widgetLoading}>
-          {widgetLoading ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
-          Conectar banco
-        </Button>
+        {openFinanceEnabled && (
+          <Button onClick={handleConnectBank} disabled={widgetLoading}>
+            {widgetLoading ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
+            Conectar banco
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -170,6 +184,25 @@ export function AccountsPage() {
         </Card>
       </div>
 
+      {!openFinanceEnabled && (
+        <Card>
+          <CardContent className="pt-6">
+            <EmptyState
+              icon={Landmark}
+              title="Conexão automática com bancos em breve"
+              description="Enquanto isso, importe extratos e faturas (CSV, Excel ou PDF) na página de transações."
+              action={
+                <Button onClick={() => navigate('/transactions')}>
+                  <FileUp className="size-4" />
+                  Importar arquivo
+                </Button>
+              }
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      {openFinanceEnabled && (
       <Card>
         <CardHeader>
           <CardTitle>Conexões bancárias</CardTitle>
@@ -229,6 +262,7 @@ export function AccountsPage() {
           ))}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader>

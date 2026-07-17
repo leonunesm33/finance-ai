@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_ai
 from app.models.user import User
 from app.schemas.chat import ConversationResponse, MessageCreate, MessageResponse
 from app.services import chat_service
@@ -38,7 +38,7 @@ async def list_messages(
 async def send_message(
     conversation_id: uuid.UUID,
     data: MessageCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_ai),
     db: AsyncSession = Depends(get_db),
 ):
     await chat_service.get_owned_conversation(db, current_user, conversation_id)

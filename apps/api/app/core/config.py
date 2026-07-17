@@ -36,13 +36,52 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    # Open Finance — desabilitado neste primeiro momento (custo de produção).
+    # A estrutura multi-provedor fica pronta; ligar exige flag + credenciais.
+    OPEN_FINANCE_ENABLED: bool = False
+    OPEN_FINANCE_PROVIDER: str = "pluggy"  # pluggy | polp | belvo | celcoin
+
     # Pluggy
     PLUGGY_CLIENT_ID: str = ""
     PLUGGY_CLIENT_SECRET: str = ""
     PLUGGY_WEBHOOK_SECRET: str = ""
 
-    # Anthropic
+    # Polp (https://www.polp.com.br)
+    POLP_API_KEY: str = ""
+
+    # Belvo (https://belvo.com)
+    BELVO_SECRET_ID: str = ""
+    BELVO_SECRET_PASSWORD: str = ""
+    BELVO_ENVIRONMENT: str = "sandbox"  # sandbox | production
+
+    # Celcoin
+    CELCOIN_CLIENT_ID: str = ""
+    CELCOIN_CLIENT_SECRET: str = ""
+
+    # IA — provedor ativo e credenciais. "openrouter" é o padrão do projeto;
+    # anthropic/openai/gemini/groq ficam prontos para uso direto no futuro.
+    AI_PROVIDER: str = "openrouter"  # openrouter | anthropic | openai | gemini | groq
+    OPENROUTER_API_KEY: str = ""
     ANTHROPIC_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    GEMINI_API_KEY: str = ""
+    GROQ_API_KEY: str = ""
+    # Modelos por tarefa (defaults pensados para o OpenRouter; para outro
+    # provedor, defina explicitamente no .env)
+    AI_CHAT_MODEL: str = "anthropic/claude-sonnet-4.5"
+    AI_PARSE_MODEL: str = "anthropic/claude-haiku-4.5"
+    AI_ANALYSIS_MODEL: str = "anthropic/claude-sonnet-4.5"
+
+    @property
+    def ai_enabled(self) -> bool:
+        key_by_provider = {
+            "openrouter": self.OPENROUTER_API_KEY,
+            "anthropic": self.ANTHROPIC_API_KEY,
+            "openai": self.OPENAI_API_KEY,
+            "gemini": self.GEMINI_API_KEY,
+            "groq": self.GROQ_API_KEY,
+        }
+        return bool(key_by_provider.get(self.AI_PROVIDER, ""))
 
     # Admin seed
     ADMIN_EMAIL: str = "admin@financeai.app"

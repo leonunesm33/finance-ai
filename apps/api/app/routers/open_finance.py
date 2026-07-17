@@ -1,5 +1,3 @@
-import hashlib
-import hmac
 import uuid
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
@@ -8,12 +6,27 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import async_session_factory, get_db
 from app.core.deps import get_current_user
+from app.integrations.openfinance import get_provider
 from app.models.user import User
 from app.schemas.open_finance import BankConnectionResponse, ConnectTokenResponse, ItemCreatedRequest
 from app.services import open_finance_service
 from app.tasks.pluggy_sync import sync_connection
 
-router = APIRouter(prefix="/v1/open-finance", tags=["open-finance"])
+
+def require_open_finance() -> None:
+    """Fail-closed: toda a área de Open Finance responde 503 com a flag desligada."""
+    if not settings.OPEN_FINANCE_ENABLED:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Open Finance indisponível no momento",
+        )
+
+
+router = APIRouter(
+    prefix="/v1/open-finance",
+    tags=["open-finance"],
+    dependencies=[Depends(require_open_finance)],
+)
 
 
 @router.post("/connect-token", response_model=ConnectTokenResponse)
@@ -34,18 +47,11 @@ async def register_item(
 
 
 @router.post("/webhook", status_code=status.HTTP_204_NO_CONTENT)
-async def pluggy_webhook(request: Request, x_pluggy_signature: str | None = Header(default=None)):
-    # Fail-closed: sem segredo configurado não há como autenticar o webhook — não processar nada.
-    if not settings.PLUGGY_WEBHOOK_SECRET:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Webhook indisponível: segredo não configurado",
-        )
-
+async def provider_webhook(request: Request, x_pluggy_signature: str | None = Header(default=None)):
     body = await request.body()
 
-    expected = hmac.new(settings.PLUGGY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
-    if not x_pluggy_signature or not hmac.compare_digest(expected, x_pluggy_signature):
+    # Fail-closed: o provedor valida a assinatura (e recusa tudo sem segredo configurado).
+    if not get_provider().verify_webhook(x_pluggy_signature, body):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Assinatura inválida")
 
     payload = await request.json()

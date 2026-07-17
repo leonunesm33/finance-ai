@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { Sparkles } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
@@ -17,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useCategories } from '@/hooks/use-categories'
+import { useConfig } from '@/hooks/use-config'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
 import { todayLocalISODate } from '@/lib/utils'
@@ -50,6 +52,8 @@ export function NewTransactionDialog({ open, onOpenChange }: NewTransactionDialo
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const { data: categories } = useCategories()
+  const { data: config } = useConfig()
+  const aiEnabled = config?.ai_enabled ?? false
   const [freeText, setFreeText] = useState('')
 
   const {
@@ -77,7 +81,16 @@ export function NewTransactionDialog({ open, onOpenChange }: NewTransactionDialo
       if (data.category_id) setValue('category_id', data.category_id)
       toast({ title: `Interpretado com ${Math.round(data.confidence * 100)}% de confiança` })
     },
-    onError: () => {
+    onError: (error) => {
+      // Fallback: a flag ai_enabled pode ter mudado no servidor depois do /config ser cacheado.
+      if (isAxiosError(error) && error.response?.status === 503) {
+        toast({
+          variant: 'destructive',
+          title: 'Assistente de IA não configurado',
+          description: 'Preencha o formulário manualmente.',
+        })
+        return
+      }
       toast({
         variant: 'destructive',
         title: 'Não foi possível interpretar o texto',
@@ -114,22 +127,24 @@ export function NewTransactionDialog({ open, onOpenChange }: NewTransactionDialo
         </DialogHeader>
 
         <div className="flex flex-col gap-4">
-          <div className="flex gap-2">
-            <Input
-              placeholder="Descreva o gasto... (ex: gastei 45 no almoço)"
-              value={freeText}
-              onChange={(e) => setFreeText(e.target.value)}
-            />
-            <Button
-              type="button"
-              variant="outline"
-              disabled={!freeText || parse.isPending}
-              onClick={() => parse.mutate(freeText)}
-            >
-              <Sparkles className="size-4" />
-              {parse.isPending ? '...' : 'IA'}
-            </Button>
-          </div>
+          {aiEnabled && (
+            <div className="flex gap-2">
+              <Input
+                placeholder="Descreva o gasto... (ex: gastei 45 no almoço)"
+                value={freeText}
+                onChange={(e) => setFreeText(e.target.value)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                disabled={!freeText || parse.isPending}
+                onClick={() => parse.mutate(freeText)}
+              >
+                <Sparkles className="size-4" />
+                {parse.isPending ? '...' : 'IA'}
+              </Button>
+            </div>
+          )}
 
           <form
             className="flex flex-col gap-4"

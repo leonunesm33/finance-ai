@@ -6,6 +6,7 @@ import { EmptyState } from '@/components/shared/empty-state'
 import { PageError } from '@/components/shared/page-error'
 import { ListSkeleton } from '@/components/shared/page-skeleton'
 import { ImportCsvDialog } from '@/components/transactions/import-csv-dialog'
+import { ImportDialog } from '@/components/transactions/import-dialog'
 import { NewTransactionDialog } from '@/components/transactions/new-transaction-dialog'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -62,6 +63,8 @@ export function TransactionsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [newOpen, setNewOpen] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  // Fallback de mapeamento manual de colunas para CSVs que a detecção automática não entendeu.
+  const [csvFallbackOpen, setCsvFallbackOpen] = useState(false)
 
   const { data: categories } = useCategories()
 
@@ -115,7 +118,7 @@ export function TransactionsPage() {
         <div className="flex gap-2">
           <Button variant="outline" className="hidden sm:inline-flex" onClick={() => setImportOpen(true)}>
             <Upload className="size-4" />
-            Importar CSV
+            Importar
           </Button>
           <Button variant="outline" className="hidden sm:inline-flex" onClick={handleExport}>
             <Download className="size-4" />
@@ -135,7 +138,7 @@ export function TransactionsPage() {
             <DropdownMenuContent align="end">
               <DropdownMenuItem onSelect={() => setImportOpen(true)}>
                 <Upload className="size-4" />
-                Importar CSV
+                Importar
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void handleExport()}>
                 <Download className="size-4" />
@@ -227,7 +230,7 @@ export function TransactionsPage() {
               <EmptyState
                 icon={ReceiptText}
                 title="Nenhuma transação ainda"
-                description="Registre sua primeira transação manualmente ou importe um extrato em CSV para começar."
+                description="Registre sua primeira transação manualmente ou importe um extrato ou fatura (CSV, Excel ou PDF) para começar."
                 action={
                   <>
                     <Button onClick={() => setNewOpen(true)}>
@@ -236,7 +239,7 @@ export function TransactionsPage() {
                     </Button>
                     <Button variant="outline" onClick={() => setImportOpen(true)}>
                       <Upload className="size-4" />
-                      Importar CSV
+                      Importar
                     </Button>
                   </>
                 }
@@ -299,7 +302,15 @@ export function TransactionsPage() {
       </Card>
 
       <NewTransactionDialog open={newOpen} onOpenChange={setNewOpen} />
-      <ImportCsvDialog open={importOpen} onOpenChange={setImportOpen} />
+      <ImportDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onManualCsvFallback={() => {
+          setImportOpen(false)
+          setCsvFallbackOpen(true)
+        }}
+      />
+      <ImportCsvDialog open={csvFallbackOpen} onOpenChange={setCsvFallbackOpen} />
     </div>
   )
 }

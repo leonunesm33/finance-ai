@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.integrations.pluggy import PluggyError, pluggy_client
+from app.integrations.openfinance import OpenFinanceProviderError, get_provider
 from app.models.bank_account import BankAccount
 from app.models.bank_connection import BankConnection
 from app.models.user import User
@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 
 async def create_connect_token() -> str:
     try:
-        data = await pluggy_client.create_connect_token()
-    except PluggyError:
+        data = await get_provider().create_connect_token()
+    except (OpenFinanceProviderError, NotImplementedError):
         logger.exception("Falha ao gerar connect token no Pluggy")
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -37,8 +37,8 @@ async def register_connection(db: AsyncSession, user: User, item_id: str) -> Ban
         return existing
 
     try:
-        item = await pluggy_client.get_item(item_id)
-    except PluggyError:
+        item = await get_provider().get_item(item_id)
+    except (OpenFinanceProviderError, NotImplementedError):
         logger.exception("Falha ao consultar item %s no Pluggy", item_id)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -84,8 +84,8 @@ async def delete_connection(db: AsyncSession, user: User, connection_id: uuid.UU
     connection = await get_owned_connection(db, user, connection_id)
 
     try:
-        await pluggy_client.delete_item(connection.pluggy_item_id)
-    except PluggyError:
+        await get_provider().delete_item(connection.pluggy_item_id)
+    except (OpenFinanceProviderError, NotImplementedError):
         pass  # best-effort: prossegue com o soft-delete local mesmo se o Pluggy falhar
 
     connection.is_active = False

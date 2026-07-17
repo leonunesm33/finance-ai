@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.security import decode_token
 from app.models.user import User
@@ -47,3 +48,13 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+def require_ai(current_user: User = Depends(get_current_user)) -> User:
+    """Gate dos endpoints de IA: 401 sem login (primeiro), 503 sem provedor configurado."""
+    if not settings.ai_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Assistente de IA não configurado",
+        )
+    return current_user

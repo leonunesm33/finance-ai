@@ -8,6 +8,14 @@ export class ChatSessionExpiredError extends Error {
   }
 }
 
+/** O servidor respondeu 503: nenhum provedor de IA configurado (ai_enabled=false). */
+export class AiUnavailableError extends Error {
+  constructor() {
+    super('Assistente de IA não configurado.')
+    this.name = 'AiUnavailableError'
+  }
+}
+
 async function ensureAccessToken(): Promise<string | null> {
   const { accessToken } = useAuthStore.getState()
   if (accessToken) return accessToken
@@ -51,6 +59,7 @@ export async function streamChatMessage(
 
   if (!response.ok || !response.body) {
     if (response.status === 401) throw new ChatSessionExpiredError()
+    if (response.status === 503) throw new AiUnavailableError()
     throw new Error('Falha ao enviar mensagem')
   }
 

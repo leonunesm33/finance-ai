@@ -1,16 +1,20 @@
+"""Tarefas de IA do produto, agnósticas de provedor.
+
+Histórico: este módulo nasceu acoplado à Anthropic (daí o nome). Hoje ele
+delega ao provedor ativo via app.integrations.ai (OpenRouter por padrão;
+Anthropic/OpenAI/Gemini/Groq prontos por configuração). Os modelos vêm de
+settings.AI_CHAT_MODEL / AI_PARSE_MODEL.
+"""
 import json
 from collections.abc import AsyncIterator
 from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-import anthropic
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.config import settings
-
-PARSE_MODEL = "claude-haiku-4-5-20251001"
-CHAT_MODEL = "claude-sonnet-5"
+from app.integrations.ai import AIProviderError, get_ai_client
 
 
 class ClaudeParseError(Exception):
@@ -43,26 +47,29 @@ def validate_parsed_transaction(raw: object) -> ParsedTransaction:
 
 
 async def stream_chat(system: str, messages: list[dict]) -> AsyncIterator[str]:
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-
     try:
-        async with client.messages.stream(
-            model=CHAT_MODEL,
-            max_tokens=1500,
-            system=system,
-            messages=messages,
-        ) as stream:
-            async for text in stream.text_stream:
-                yield text
-    except anthropic.APIError as error:
+        client = get_ai_client()
+        async for text in client.stream_chat(
+            system, messages, model=settings.AI_CHAT_MODEL, max_tokens=1500
+        ):
+            yield text
+    except AIProviderError as error:
         yield f"\n\n_Erro ao consultar a IA: {error}_"
+
+
+def _strip_json_fences(text: str) -> str:
+    """Alguns modelos ignoram o 'sem markdown' e devolvem ```json ... ```."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[-1] if "\n" in text else ""
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[: -len("```")]
+    return text.strip()
 
 
 async def parse_transaction_text(
     text: str, user_categories: list[str], user_personality: str
 ) -> ParsedTransaction:
-    client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
-
     system = f"""Você é um assistente financeiro pessoal com personalidade '{user_personality}'.
 Analise o texto do usuário e extraia os dados de uma transação financeira.
 Categorias disponíveis: {json.dumps(user_categories, ensure_ascii=False)}
@@ -73,18 +80,14 @@ Responda SOMENTE com um JSON válido, sem markdown, no formato exato:
 "alternatives": [{{"category_name": string, "confidence": number}}]}}"""
 
     try:
-        message = await client.messages.create(
-            model=PARSE_MODEL,
-            max_tokens=500,
-            system=system,
-            messages=[{"role": "user", "content": text}],
+        raw_text = await get_ai_client().complete(
+            system, text, model=settings.AI_PARSE_MODEL, max_tokens=500
         )
-    except anthropic.APIError as error:
+    except AIProviderError as error:
         raise ClaudeParseError(str(error))
 
-    raw_text = message.content[0].text if message.content else ""
     try:
-        raw = json.loads(raw_text)
+        raw = json.loads(_strip_json_fences(raw_text))
     except json.JSONDecodeError as error:
         raise ClaudeParseError(f"Resposta da IA não é um JSON válido: {error}")
 

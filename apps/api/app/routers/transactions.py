@@ -5,9 +5,12 @@ from fastapi import APIRouter, Depends, File, Form, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from fastapi import HTTPException
+
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_ai
 from app.models.user import User
+from app.schemas.imports import ImportCommitRequest, ImportCommitResult, ImportPreviewResponse
 from app.schemas.transaction import (
     CsvImportResult,
     TransactionCreate,
@@ -17,9 +20,32 @@ from app.schemas.transaction import (
     TransactionResponse,
     TransactionUpdate,
 )
-from app.services import transaction_service
+from app.services import import_service, transaction_service
 
 router = APIRouter(prefix="/v1/transactions", tags=["transactions"])
+
+
+@router.post("/import/preview", response_model=ImportPreviewResponse)
+async def import_preview(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Detecta formato (CSV/XLS/XLSX/PDF), classifica extrato × fatura e extrai lançamentos."""
+    content = await file.read()
+    try:
+        return import_service.build_preview(file.filename or "", content)
+    except ValueError as error:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error))
+
+
+@router.post("/import/commit", response_model=ImportCommitResult)
+async def import_commit(
+    data: ImportCommitRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persiste os lançamentos confirmados no preview (com reconciliação anti-duplicidade)."""
+    return await import_service.commit_import(db, current_user, data)
 
 
 @router.get("/", response_model=TransactionListResponse)
@@ -64,7 +90,7 @@ async def create_transaction(
 @router.post("/parse", response_model=TransactionParseResponse)
 async def parse_transaction(
     data: TransactionParseRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_ai),
     db: AsyncSession = Depends(get_db),
 ):
     return await transaction_service.parse_transaction(db, current_user, data.text)

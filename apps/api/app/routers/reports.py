@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.celery_app import celery_app
 from app.core.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, require_ai
 from app.models.user import User
 from app.schemas.report import (
     AIAnalysisJobResponse,
@@ -52,7 +52,7 @@ async def get_category_report(
 
 
 @router.post("/ai-analysis", response_model=AIAnalysisJobResponse, status_code=status.HTTP_202_ACCEPTED)
-async def request_ai_analysis(data: AIAnalysisRequest, current_user: User = Depends(get_current_user)):
+async def request_ai_analysis(data: AIAnalysisRequest, current_user: User = Depends(require_ai)):
     task = generate_ai_analysis.delay(
         str(current_user.id), data.period_start.isoformat(), data.period_end.isoformat()
     )

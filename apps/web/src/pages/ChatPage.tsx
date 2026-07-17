@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { History, Plus, Send, Trash2 } from 'lucide-react'
+import { History, Plus, Send, Sparkles, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 
@@ -7,9 +7,10 @@ import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
+import { useConfig } from '@/hooks/use-config'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
-import { ChatSessionExpiredError, streamChatMessage } from '@/lib/chat-stream'
+import { AiUnavailableError, ChatSessionExpiredError, streamChatMessage } from '@/lib/chat-stream'
 import { cn } from '@/lib/utils'
 import type { ChatMessage, Conversation } from '@/types/chat'
 
@@ -86,6 +87,8 @@ function ConversationList({
 export function ChatPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { data: config } = useConfig()
+  const aiEnabled = config?.ai_enabled ?? false
   const [activeId, setActiveId] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
@@ -164,13 +167,22 @@ export function ChatPage() {
     } catch (error) {
       const aborted = error instanceof DOMException && error.name === 'AbortError'
       if (!aborted) {
-        toast({
-          variant: 'destructive',
-          title:
-            error instanceof ChatSessionExpiredError
-              ? 'Sessão expirada — entre novamente'
-              : 'Não foi possível enviar a mensagem',
-        })
+        if (error instanceof AiUnavailableError) {
+          // Fallback: a flag pode ter mudado no servidor depois do /config ser cacheado.
+          toast({
+            variant: 'destructive',
+            title: 'Assistente de IA não configurado',
+            description: 'Configure um provedor de IA no servidor para usar o chat.',
+          })
+        } else {
+          toast({
+            variant: 'destructive',
+            title:
+              error instanceof ChatSessionExpiredError
+                ? 'Sessão expirada — entre novamente'
+                : 'Não foi possível enviar a mensagem',
+          })
+        }
       }
     } finally {
       setIsSending(false)
@@ -232,15 +244,19 @@ export function ChatPage() {
           {messages.length === 0 && !streamingText && (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
               <p className="text-muted-foreground text-sm">
-                Pergunte algo sobre suas finanças
+                {aiEnabled
+                  ? 'Pergunte algo sobre suas finanças'
+                  : 'O histórico de conversas continua disponível aqui.'}
               </p>
-              <div className="flex flex-col gap-2">
-                {SUGGESTED_QUESTIONS.map((question) => (
-                  <Button key={question} variant="outline" size="sm" onClick={() => handleSend(question)}>
-                    {question}
-                  </Button>
-                ))}
-              </div>
+              {aiEnabled && (
+                <div className="flex flex-col gap-2">
+                  {SUGGESTED_QUESTIONS.map((question) => (
+                    <Button key={question} variant="outline" size="sm" onClick={() => handleSend(question)}>
+                      {question}
+                    </Button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -271,23 +287,37 @@ export function ChatPage() {
           </div>
         </div>
 
-        <form
-          className="flex gap-2 border-t p-3"
-          onSubmit={(e) => {
-            e.preventDefault()
-            handleSend(input)
-          }}
-        >
-          <Input
-            placeholder="Pergunte sobre suas finanças..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            disabled={isSending}
-          />
-          <Button type="submit" aria-label="Enviar mensagem" disabled={isSending || !input.trim()}>
-            <Send className="size-4" />
-          </Button>
-        </form>
+        {aiEnabled ? (
+          <form
+            className="flex gap-2 border-t p-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              handleSend(input)
+            }}
+          >
+            <Input
+              placeholder="Pergunte sobre suas finanças..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              disabled={isSending}
+            />
+            <Button type="submit" aria-label="Enviar mensagem" disabled={isSending || !input.trim()}>
+              <Send className="size-4" />
+            </Button>
+          </form>
+        ) : (
+          <div className="flex items-center gap-3 border-t p-4">
+            <div className="bg-muted flex size-10 shrink-0 items-center justify-center rounded-full">
+              <Sparkles className="text-muted-foreground size-5" aria-hidden />
+            </div>
+            <div className="flex flex-col">
+              <p className="text-sm font-medium">O assistente de IA ainda não está configurado</p>
+              <p className="text-muted-foreground text-sm">
+                Configure um provedor de IA para conversar sobre suas finanças.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       <ConfirmDialog

@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import hmac
 import logging
 import time
 from datetime import date
@@ -6,6 +8,7 @@ from datetime import date
 import httpx
 
 from app.core.config import settings
+from app.integrations.openfinance.base import OpenFinanceProviderError
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +19,7 @@ API_KEY_TTL_SECONDS = 2 * 60 * 60
 API_KEY_RENEW_MARGIN_SECONDS = 5 * 60
 
 
-class PluggyError(Exception):
+class PluggyError(OpenFinanceProviderError):
     pass
 
 
@@ -130,6 +133,13 @@ class PluggyClient:
 
         cutoff = from_date.isoformat()
         return [t for t in results if str(t.get("date", ""))[:10] >= cutoff]
+
+    def verify_webhook(self, signature: str | None, body: bytes) -> bool:
+        """HMAC-SHA256 do corpo com PLUGGY_WEBHOOK_SECRET. Fail-closed sem segredo."""
+        if not settings.PLUGGY_WEBHOOK_SECRET or not signature:
+            return False
+        expected = hmac.new(settings.PLUGGY_WEBHOOK_SECRET.encode(), body, hashlib.sha256).hexdigest()
+        return hmac.compare_digest(expected, signature)
 
 
 pluggy_client = PluggyClient()

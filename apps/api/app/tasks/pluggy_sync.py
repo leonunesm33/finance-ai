@@ -6,7 +6,8 @@ from sqlalchemy import select
 
 from app.core.celery_app import celery_app
 from app.core.database import task_session
-from app.integrations.pluggy import PluggyError, pluggy_client
+from app.core.config import settings
+from app.integrations.openfinance import OpenFinanceProviderError, get_provider
 from app.models.bank_account import BankAccount
 from app.models.bank_connection import BankConnection
 from app.models.transaction import Transaction
@@ -23,10 +24,10 @@ def _parse_date(value: str | None) -> date | None:
 
 async def _sync_account_transactions(db, user_id, account: BankAccount) -> None:
     try:
-        raw_transactions = await pluggy_client.get_transactions(
+        raw_transactions = await get_provider().get_transactions(
             account.pluggy_account_id, date.today() - timedelta(days=TRANSACTION_SYNC_DAYS)
         )
-    except PluggyError:
+    except (OpenFinanceProviderError, NotImplementedError):
         return
 
     for raw_tx in raw_transactions:
@@ -67,9 +68,9 @@ async def _sync_connection(connection_id: str) -> None:
             return
 
         try:
-            item = await pluggy_client.get_item(connection.pluggy_item_id)
-            accounts = await pluggy_client.get_accounts(connection.pluggy_item_id)
-        except PluggyError as error:
+            item = await get_provider().get_item(connection.pluggy_item_id)
+            accounts = await get_provider().get_accounts(connection.pluggy_item_id)
+        except (OpenFinanceProviderError, NotImplementedError) as error:
             connection.status = "LOGIN_ERROR"
             connection.error_message = str(error)
             await db.commit()
@@ -123,6 +124,8 @@ async def _sync_connection(connection_id: str) -> None:
 
 @celery_app.task(name="pluggy.sync_connection")
 def sync_connection(connection_id: str) -> None:
+    if not settings.OPEN_FINANCE_ENABLED:
+        return
     asyncio.run(_sync_connection(connection_id))
 
 
@@ -134,6 +137,8 @@ async def _sync_all_connections() -> list[str]:
 
 @celery_app.task(name="pluggy.sync_all_connections")
 def sync_all_connections() -> None:
+    if not settings.OPEN_FINANCE_ENABLED:
+        return
     connection_ids = asyncio.run(_sync_all_connections())
     for connection_id in connection_ids:
         sync_connection.delay(connection_id)

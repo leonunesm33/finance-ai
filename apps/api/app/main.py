@@ -13,6 +13,7 @@ from app.routers import (
     calculators,
     categories,
     chat,
+    config,
     dashboard,
     goals,
     health,
@@ -45,6 +46,7 @@ def create_app() -> FastAPI:
     app.add_middleware(JSONLoggingMiddleware)
 
     app.include_router(health.router, prefix="/api")
+    app.include_router(config.router, prefix="/api")
     app.include_router(auth.router, prefix="/api")
     app.include_router(users.router, prefix="/api")
     app.include_router(open_finance.router, prefix="/api")

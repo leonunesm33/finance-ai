@@ -41,3 +41,31 @@ export interface CsvImportResult {
   reconciled: number
   skipped: number
 }
+
+export type ImportFileFormat = 'csv' | 'xls' | 'xlsx' | 'pdf'
+export type ImportDocumentType = 'extrato' | 'fatura'
+
+export interface ImportPreviewTransaction {
+  date: string
+  description: string
+  /** Valor serializado como string decimal pela API (ex.: "123.45"). */
+  amount: string
+  type: TransactionType
+  category_id: string | null
+}
+
+/** Resposta de POST /v1/transactions/import/preview. */
+export interface ImportPreviewResult {
+  file_format: ImportFileFormat
+  document_type: ImportDocumentType
+  confidence: number
+  transactions: ImportPreviewTransaction[]
+  warnings: string[]
+}
+
+/** Resposta de POST /v1/transactions/import/commit. */
+export interface ImportCommitResult {
+  created: number
+  reconciled: number
+  skipped: number
+}

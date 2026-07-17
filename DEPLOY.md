@@ -17,8 +17,9 @@ docker-compose up -d --build
 1. Preencha o `.env` com valores reais (nunca commitá-lo):
    - `ENVIRONMENT=production` — a API **recusa subir** com SECRET_KEY/senhas placeholder (fail-fast).
    - `POSTGRES_PASSWORD` forte (e `DATABASE_URL` coerente) **antes** do primeiro `up` (o volume do Postgres é inicializado com essa senha).
-   - `ANTHROPIC_API_KEY`, `PLUGGY_CLIENT_ID`, `PLUGGY_CLIENT_SECRET`, `PLUGGY_WEBHOOK_SECRET` (o webhook responde 503 sem secret — fail-closed).
    - `FRONTEND_URL=https://seu-dominio`.
+   - **IA**: `AI_PROVIDER` (padrão `openrouter`) + a chave correspondente (`OPENROUTER_API_KEY`, ou `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`/`GEMINI_API_KEY`/`GROQ_API_KEY`) e os modelos `AI_CHAT_MODEL`/`AI_PARSE_MODEL`/`AI_ANALYSIS_MODEL`. Sem chave, os recursos de IA respondem 503 e o resto do app funciona.
+   - **Open Finance**: fica **desligado** (`OPEN_FINANCE_ENABLED=false`). Para ligar no futuro: `OPEN_FINANCE_ENABLED=true`, `OPEN_FINANCE_PROVIDER` (pluggy | polp | belvo | celcoin) e as credenciais do provedor (Pluggy: `PLUGGY_CLIENT_ID/SECRET` + `PLUGGY_WEBHOOK_SECRET` — o webhook responde 503/401 fail-closed).
 2. Gere o build estático do frontend (o nginx de produção serve `apps/web/dist`):
    ```bash
    docker-compose run --rm web npm run build

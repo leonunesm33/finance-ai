@@ -1,4 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import { CalendarSearch, Loader2, Printer, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import Markdown from 'react-markdown'
@@ -18,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useConfig } from '@/hooks/use-config'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
 import { downloadFile } from '@/lib/download'
@@ -66,6 +68,9 @@ export function ReportsPage() {
   const [jobId, setJobId] = useState<string | null>(null)
   const [analysisResult, setAnalysisResult] = useState<string | null>(null)
 
+  const { data: config } = useConfig()
+  const aiEnabled = config?.ai_enabled ?? false
+
   const monthlyQuery = useQuery({
     queryKey: ['reports', 'monthly', year, month],
     queryFn: () => fetchMonthlyReport(year, month),
@@ -89,7 +94,16 @@ export function ReportsPage() {
       setJobId(data.job_id)
       setAnalysisResult(null)
     },
-    onError: () => {
+    onError: (error) => {
+      // Fallback: a flag ai_enabled pode ter mudado no servidor depois do /config ser cacheado.
+      if (isAxiosError(error) && error.response?.status === 503) {
+        toast({
+          variant: 'destructive',
+          title: 'Assistente de IA não configurado',
+          description: 'Configure um provedor de IA no servidor para gerar análises.',
+        })
+        return
+      }
       toast({ variant: 'destructive', title: 'Não foi possível iniciar a análise' })
     },
   })
@@ -369,18 +383,25 @@ export function ReportsPage() {
           <CardTitle>Análise com IA</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <Button
-            className="self-start"
-            disabled={Boolean(jobId) || requestAnalysis.isPending}
-            onClick={() => requestAnalysis.mutate()}
-          >
-            {jobId ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
+          <div className="flex flex-col gap-1 self-start" title={aiEnabled ? undefined : 'IA não configurada'}>
+            <Button
+              className="self-start"
+              disabled={!aiEnabled || Boolean(jobId) || requestAnalysis.isPending}
+              onClick={() => requestAnalysis.mutate()}
+            >
+              {jobId ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              {!aiEnabled ? 'IA não configurada' : jobId ? 'Gerando análise...' : 'Gerar análise com IA'}
+            </Button>
+            {!aiEnabled && (
+              <p className="text-muted-foreground text-xs">
+                Configure um provedor de IA no servidor para gerar análises do período.
+              </p>
             )}
-            {jobId ? 'Gerando análise...' : 'Gerar análise com IA'}
-          </Button>
+          </div>
 
           {analysisResult && (
             <div className="chat-markdown rounded-md border p-4 text-sm">

@@ -288,11 +288,12 @@ def test_report_yearly(client, auth_a):
 
 
 # ------------------------------- serviços externos: só exigem autenticação
+# Open Finance fica fora desta lista: com a feature flag desligada o router
+# inteiro responde 503 antes da autenticação (fail-closed) — coberto em
+# tests/test_open_finance_flag.py.
 
 def test_endpoints_externos_exigem_auth(client):
     protegidos = [
-        ("post", f"{API}/open-finance/connect-token"),
-        ("get", f"{API}/open-finance/connections"),
         ("get", f"{API}/bank-accounts/"),
         ("get", f"{API}/chat/conversations"),
         ("post", f"{API}/reports/ai-analysis"),
