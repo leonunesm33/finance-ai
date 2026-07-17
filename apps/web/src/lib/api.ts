@@ -7,6 +7,9 @@ export const api = axios.create({
   timeout: 10000,
 })
 
+/** Timeout maior para operações lentas (import CSV, parse com IA). */
+export const LONG_REQUEST_TIMEOUT = 60_000
+
 api.interceptors.request.use((config) => {
   const { accessToken } = useAuthStore.getState()
   if (accessToken) {
@@ -18,19 +21,30 @@ api.interceptors.request.use((config) => {
 let refreshPromise: Promise<string | null> | null = null
 
 async function refreshAccessToken(): Promise<string | null> {
-  const { refreshToken, setTokens, clear } = useAuthStore.getState()
-  if (!refreshToken) return null
-
   try {
-    const { data } = await axios.post<{ access_token: string }>('/api/v1/auth/refresh', {
-      refresh_token: refreshToken,
-    })
-    setTokens(data.access_token, refreshToken)
+    // O refresh token vive em cookie httpOnly (path=/api/v1/auth) — o browser
+    // envia automaticamente na requisição same-origin; não há body.
+    const { data } = await axios.post<{ access_token: string }>('/api/v1/auth/refresh')
+    useAuthStore.getState().setAccessToken(data.access_token)
     return data.access_token
   } catch {
-    clear()
+    useAuthStore.getState().clear()
     return null
   }
+}
+
+/**
+ * Tenta renovar o access token via cookie httpOnly, deduplicando chamadas
+ * concorrentes (fila anti-corrida). Retorna o novo token ou null (sessão
+ * encerrada — o store é limpo).
+ */
+export function refreshSession(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null
+    })
+  }
+  return refreshPromise
 }
 
 api.interceptors.response.use(
@@ -42,19 +56,12 @@ api.interceptors.response.use(
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true
 
-      if (!refreshPromise) {
-        refreshPromise = refreshAccessToken().finally(() => {
-          refreshPromise = null
-        })
-      }
-
-      const newAccessToken = await refreshPromise
+      const newAccessToken = await refreshSession()
       if (newAccessToken) {
         originalRequest.headers.set('Authorization', `Bearer ${newAccessToken}`)
         return api(originalRequest)
       }
-
-      window.location.href = '/login'
+      // refresh falhou: o store foi limpo e o ProtectedRoute redireciona para /login.
     }
 
     return Promise.reject(error)

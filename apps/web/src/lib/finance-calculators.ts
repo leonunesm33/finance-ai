@@ -11,12 +11,20 @@ export interface CompoundInterestResult {
   points: CompoundInterestPoint[]
 }
 
+// 100 anos: acima disso o gráfico trava a aba sem valor informativo
+export const MAX_MONTHS = 1200
+
 export function compoundInterest(
   principal: number,
   monthlyContribution: number,
   annualRatePercent: number,
   months: number,
 ): CompoundInterestResult {
+  if (!Number.isFinite(principal)) principal = 0
+  if (!Number.isFinite(monthlyContribution)) monthlyContribution = 0
+  if (!Number.isFinite(annualRatePercent)) annualRatePercent = 0
+  months = Number.isFinite(months) ? Math.min(Math.max(Math.floor(months), 0), MAX_MONTHS) : 0
+
   const monthlyRate = Math.pow(1 + annualRatePercent / 100, 1 / 12) - 1
   const points: CompoundInterestPoint[] = []
 

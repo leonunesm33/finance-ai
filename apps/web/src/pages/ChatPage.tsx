@@ -1,13 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Send, Trash2 } from 'lucide-react'
+import { History, Plus, Send, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import Markdown from 'react-markdown'
 
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
-import { streamChatMessage } from '@/lib/chat-stream'
+import { ChatSessionExpiredError, streamChatMessage } from '@/lib/chat-stream'
 import { cn } from '@/lib/utils'
 import type { ChatMessage, Conversation } from '@/types/chat'
 
@@ -27,14 +29,76 @@ async function fetchMessages(conversationId: string) {
   return data
 }
 
+/** Lista de conversas usada tanto no aside (desktop) quanto no Sheet (mobile). */
+function ConversationList({
+  conversations,
+  activeId,
+  onSelect,
+  onDelete,
+}: {
+  conversations: Conversation[] | undefined
+  activeId: string | null
+  onSelect: (id: string | null) => void
+  onDelete: (conversation: Conversation) => void
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <Button onClick={() => onSelect(null)} variant="outline" className="justify-start gap-2">
+        <Plus className="size-4" />
+        Nova conversa
+      </Button>
+      <div className="flex flex-col gap-1 overflow-y-auto">
+        {conversations?.map((conversation) => (
+          <div
+            key={conversation.id}
+            role="button"
+            tabIndex={0}
+            className={cn(
+              'group focus-visible:ring-ring/50 flex cursor-pointer items-center justify-between rounded-md px-3 py-2 text-sm outline-none focus-visible:ring-[3px]',
+              conversation.id === activeId ? 'bg-primary/10 text-primary' : 'hover:bg-muted',
+            )}
+            onClick={() => onSelect(conversation.id)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault()
+                onSelect(conversation.id)
+              }
+            }}
+          >
+            <span className="truncate">{conversation.title ?? 'Nova conversa'}</span>
+            <button
+              className="text-muted-foreground hover:text-destructive focus-visible:ring-ring/50 -my-2 -mr-2 flex size-9 shrink-0 items-center justify-center rounded-md opacity-0 outline-none group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-[3px]"
+              onClick={(event) => {
+                event.stopPropagation()
+                onDelete(conversation)
+              }}
+              aria-label={`Excluir conversa ${conversation.title ?? 'sem título'}`}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function ChatPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [conversationToDelete, setConversationToDelete] = useState<Conversation | null>(null)
   const [input, setInput] = useState('')
   const [streamingText, setStreamingText] = useState<string | null>(null)
   const [isSending, setIsSending] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  // Aborta o stream em andamento ao desmontar a página.
+  useEffect(() => {
+    return () => abortRef.current?.abort()
+  }, [])
 
   const conversationsQuery = useQuery({ queryKey: ['chat', 'conversations'], queryFn: fetchConversations })
   const messagesQuery = useQuery({
@@ -82,14 +146,32 @@ export function ChatPage() {
     setIsSending(true)
     setStreamingText('')
 
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     try {
       let accumulated = ''
-      await streamChatMessage(conversationId, trimmed, (chunk) => {
-        accumulated += chunk
-        setStreamingText(accumulated)
-      })
-    } catch {
-      toast({ variant: 'destructive', title: 'Não foi possível enviar a mensagem' })
+      await streamChatMessage(
+        conversationId,
+        trimmed,
+        (chunk) => {
+          accumulated += chunk
+          setStreamingText(accumulated)
+        },
+        controller.signal,
+      )
+    } catch (error) {
+      const aborted = error instanceof DOMException && error.name === 'AbortError'
+      if (!aborted) {
+        toast({
+          variant: 'destructive',
+          title:
+            error instanceof ChatSessionExpiredError
+              ? 'Sessão expirada — entre novamente'
+              : 'Não foi possível enviar a mensagem',
+        })
+      }
     } finally {
       setIsSending(false)
       setStreamingText(null)
@@ -100,42 +182,52 @@ export function ChatPage() {
 
   const messages = messagesQuery.data ?? []
 
+  const activeConversation = conversationsQuery.data?.find((c) => c.id === activeId)
+
   return (
     <div className="flex h-[calc(100vh-6.5rem)] gap-4">
-      <aside className="hidden w-64 shrink-0 flex-col gap-2 md:flex">
-        <Button onClick={() => setActiveId(null)} variant="outline" className="justify-start gap-2">
-          <Plus className="size-4" />
-          Nova conversa
-        </Button>
-        <div className="flex flex-col gap-1 overflow-y-auto">
-          {conversationsQuery.data?.map((conversation) => (
-            <div
-              key={conversation.id}
-              className={cn(
-                'group flex items-center justify-between rounded-md px-3 py-2 text-sm',
-                conversation.id === activeId
-                  ? 'bg-accent text-accent-foreground'
-                  : 'hover:bg-accent/50 cursor-pointer',
-              )}
-              onClick={() => setActiveId(conversation.id)}
-            >
-              <span className="truncate">{conversation.title ?? 'Nova conversa'}</span>
-              <button
-                className="text-muted-foreground opacity-0 hover:text-destructive group-hover:opacity-100"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  deleteConversation.mutate(conversation.id)
-                }}
-                aria-label="Excluir conversa"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
+      <aside className="hidden w-64 shrink-0 md:flex">
+        <ConversationList
+          conversations={conversationsQuery.data}
+          activeId={activeId}
+          onSelect={setActiveId}
+          onDelete={setConversationToDelete}
+        />
       </aside>
 
+      {/* No mobile o histórico abre num Sheet, já que o aside fica oculto. */}
+      <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
+        <SheetContent side="left" className="w-72 p-4">
+          <SheetTitle className="font-display text-lg font-medium tracking-tight">
+            Conversas
+          </SheetTitle>
+          <ConversationList
+            conversations={conversationsQuery.data}
+            activeId={activeId}
+            onSelect={(id) => {
+              setActiveId(id)
+              setHistoryOpen(false)
+            }}
+            onDelete={setConversationToDelete}
+          />
+        </SheetContent>
+      </Sheet>
+
       <div className="flex min-w-0 flex-1 flex-col rounded-md border">
+        <div className="flex items-center gap-2 border-b p-2 md:hidden">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Histórico de conversas"
+            onClick={() => setHistoryOpen(true)}
+          >
+            <History className="size-4" />
+          </Button>
+          <span className="truncate text-sm font-medium">
+            {activeConversation?.title ?? 'Nova conversa'}
+          </span>
+        </div>
+
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4">
           {messages.length === 0 && !streamingText && (
             <div className="flex h-full flex-col items-center justify-center gap-4 text-center">
@@ -192,11 +284,29 @@ export function ChatPage() {
             onChange={(e) => setInput(e.target.value)}
             disabled={isSending}
           />
-          <Button type="submit" disabled={isSending || !input.trim()}>
+          <Button type="submit" aria-label="Enviar mensagem" disabled={isSending || !input.trim()}>
             <Send className="size-4" />
           </Button>
         </form>
       </div>
+
+      <ConfirmDialog
+        open={conversationToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setConversationToDelete(null)
+        }}
+        title={
+          conversationToDelete?.title
+            ? `Excluir a conversa "${conversationToDelete.title}"?`
+            : 'Excluir esta conversa?'
+        }
+        description="Todo o histórico de mensagens desta conversa será removido. Esta ação não pode ser desfeita."
+        confirmLabel="Excluir conversa"
+        onConfirm={() => {
+          if (conversationToDelete) deleteConversation.mutate(conversationToDelete.id)
+          setConversationToDelete(null)
+        }}
+      />
     </div>
   )
 }

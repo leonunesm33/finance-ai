@@ -5,9 +5,11 @@ import { useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
+import { PageError } from '@/components/shared/page-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -224,22 +226,44 @@ export function SettingsPage() {
 
   if (isError) {
     return (
-      <div className="flex flex-col items-center gap-3 p-8 text-center">
-        <p className="text-muted-foreground text-sm">Não foi possível carregar seu perfil.</p>
-        <Button variant="outline" onClick={() => refetch()}>
-          Tentar novamente
-        </Button>
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <h1 className="font-display text-2xl font-medium tracking-tight">Configurações</h1>
+        <PageError message="Não foi possível carregar seu perfil." onRetry={() => refetch()} />
       </div>
     )
   }
 
   if (isLoading || !user) {
-    return <p className="text-muted-foreground p-4 text-sm">Carregando perfil...</p>
+    return (
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
+        <h1 className="font-display text-2xl font-medium tracking-tight">Configurações</h1>
+        {/* Espelha os dois cards de formulário (perfil e senha). */}
+        {Array.from({ length: 2 }).map((_, index) => (
+          <Card key={index}>
+            <CardHeader>
+              <Skeleton className="h-5 w-32" />
+              <Skeleton className="mt-1.5 h-4 w-56 max-w-full" />
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-4 w-20" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-9 w-full" />
+              </div>
+              <Skeleton className="h-9 w-32" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    )
   }
 
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Configurações</h1>
+      <h1 className="font-display text-2xl font-medium tracking-tight">Configurações</h1>
       <ProfileForm user={user} />
       <PasswordForm />
     </div>

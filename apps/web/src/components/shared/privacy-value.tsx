@@ -1,3 +1,4 @@
+import { cn, formatCurrency } from '@/lib/utils'
 import { usePrivacyStore } from '@/stores/usePrivacyStore'
 
 interface PrivacyValueProps {
@@ -6,16 +7,18 @@ interface PrivacyValueProps {
   className?: string
 }
 
-function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency }).format(value)
-}
+/** Valor fixo exibido (borrado) quando o modo privacidade está ativo. */
+const PLACEHOLDER_VALUE = 1234.56
 
 export function PrivacyValue({ value, currency = 'BRL', className }: PrivacyValueProps) {
   const hidden = usePrivacyStore((state) => state.hidden)
 
   return (
-    <span className={className} aria-label={hidden ? 'Valor oculto' : undefined}>
-      {hidden ? '•••••' : formatCurrency(value, currency)}
+    <span
+      className={cn('tnum transition-[filter] duration-300', hidden && 'blur-sm select-none', className)}
+      aria-label={hidden ? 'Valor oculto' : undefined}
+    >
+      {formatCurrency(hidden ? PLACEHOLDER_VALUE : value, currency)}
     </span>
   )
 }

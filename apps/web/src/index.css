@@ -1,7 +1,13 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/fraunces';
+@import '@fontsource-variable/jetbrains-mono';
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces Variable', ui-serif, Georgia, serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'Cascadia Mono', monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -21,6 +27,10 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-income: var(--income);
+  --color-expense: var(--expense);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -32,59 +42,79 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
+/*
+ * "Cofre Editorial" — private banking moderno.
+ * Light: papel off-white, verde-floresta profundo, dourado escurecido.
+ */
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  --background: #f7f5f0;
+  --foreground: #1c2420;
+  --card: #ffffff;
+  --card-foreground: #1c2420;
+  --popover: #ffffff;
+  --popover-foreground: #1c2420;
+  --primary: #0e6e4f;
+  --primary-foreground: #f7f5f0;
+  --secondary: #ece8de;
+  --secondary-foreground: #1c2420;
+  --muted: #edeae2;
+  --muted-foreground: #5c6b63;
+  --accent: #b98a2e;
+  --accent-foreground: #241a05;
+  --destructive: #c2410c;
+  --destructive-foreground: #fff7ed;
+  --border: #e2ddd0;
+  --input: #e2ddd0;
+  --ring: #0e6e4f;
+  --income: #15803d;
+  --expense: #c2410c;
+  --success: #0e6e4f;
+  --warning: #a16207;
+  --chart-1: #0e6e4f;
+  --chart-2: #b98a2e;
+  --chart-3: #2f6fa8;
+  --chart-4: #8e4fa8;
+  --chart-5: #c2410c;
 }
 
+/*
+ * Dark (tema principal): verde-carvão, menta como primária,
+ * dourado reservado a highlights.
+ */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
+  --background: #0c1210;
+  --foreground: #e6ece8;
+  --card: #131a17;
+  --card-foreground: #e6ece8;
+  --popover: #131a17;
+  --popover-foreground: #e6ece8;
+  --primary: #3ecf8e;
+  --primary-foreground: #0c1210;
+  --secondary: #1b2521;
+  --secondary-foreground: #e6ece8;
+  --muted: #17201c;
+  --muted-foreground: #8ba298;
+  --accent: #e8c468;
+  --accent-foreground: #241a05;
+  --destructive: #f2735c;
+  --destructive-foreground: #0c1210;
+  --border: #22302a;
+  --input: #22302a;
+  --ring: #3ecf8e;
+  --income: #4ade80;
+  --expense: #f2735c;
+  --success: #3ecf8e;
+  --warning: #e5b453;
+  --chart-1: #3ecf8e;
+  --chart-2: #e8c468;
+  --chart-3: #6ba8de;
+  --chart-4: #c98bdb;
+  --chart-5: #f2735c;
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
 }
 
 @layer base {
@@ -92,7 +122,11 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-variant-numeric: tabular-nums;
+  }
+  .font-display {
+    font-optical-sizing: auto;
   }
 }
 

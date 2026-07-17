@@ -66,7 +66,7 @@ export function NewTransactionDialog({ open, onOpenChange }: NewTransactionDialo
 
   const parse = useMutation({
     mutationFn: async (text: string) => {
-      const { data } = await api.post<TransactionParseResult>('/v1/transactions/parse', { text })
+      const { data } = await api.post<TransactionParseResult>('/v1/transactions/parse', { text }, { timeout: 60_000 })
       return data
     },
     onSuccess: (data) => {
@@ -96,6 +96,9 @@ export function NewTransactionDialog({ open, onOpenChange }: NewTransactionDialo
     onSuccess: () => {
       toast({ title: 'Transação criada' })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['reports'] })
+      queryClient.invalidateQueries({ queryKey: ['goals'] })
       reset()
       setFreeText('')
       onOpenChange(false)

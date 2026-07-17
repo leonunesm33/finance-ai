@@ -68,6 +68,7 @@ export function ImportCsvDialog({ open, onOpenChange }: ImportCsvDialogProps) {
 
       const { data } = await api.post<CsvImportResult>('/v1/transactions/import-csv', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 120_000,
       })
       return data
     },
@@ -77,6 +78,9 @@ export function ImportCsvDialog({ open, onOpenChange }: ImportCsvDialogProps) {
         description: `${result.created} criadas, ${result.reconciled} reconciliadas, ${result.skipped} ignoradas.`,
       })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['reports'] })
+      queryClient.invalidateQueries({ queryKey: ['goals'] })
       handleReset()
       onOpenChange(false)
     },

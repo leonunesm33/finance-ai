@@ -1,13 +1,18 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2 } from 'lucide-react'
+import { Plus, Target, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
+import { PageError } from '@/components/shared/page-error'
+import { StatCardSkeleton } from '@/components/shared/page-skeleton'
 import { PrivacyValue } from '@/components/shared/privacy-value'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -36,14 +41,10 @@ const PERIOD_LABELS: Record<GoalPeriod, string> = {
   one_time: 'Único',
 }
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
-}
-
 function progressColor(percentage: number) {
-  if (percentage < 60) return 'bg-green-500'
-  if (percentage <= 80) return 'bg-amber-500'
-  return 'bg-red-500'
+  if (percentage < 60) return 'bg-success'
+  if (percentage <= 80) return 'bg-warning'
+  return 'bg-destructive'
 }
 
 const formSchema = z.object({
@@ -174,8 +175,9 @@ export function GoalsPage() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [goalToDelete, setGoalToDelete] = useState<Goal | null>(null)
 
-  const { data: goals, isLoading } = useQuery({
+  const { data: goals, isLoading, isError, refetch } = useQuery({
     queryKey: ['goals'],
     queryFn: async () => {
       const { data } = await api.get<Goal[]>('/v1/goals/')
@@ -199,33 +201,75 @@ export function GoalsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Metas e Orçamentos</h1>
+        <h1 className="font-display text-2xl font-medium tracking-tight">Metas e Orçamentos</h1>
         <Button onClick={() => setDialogOpen(true)}>
           <Plus className="size-4" />
           Nova meta
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-muted-foreground text-sm font-normal">Metas ativas</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">{goals?.length ?? 0}</CardContent>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-muted-foreground text-sm font-normal">Total orçado vs gasto</CardTitle>
-          </CardHeader>
-          <CardContent className="text-2xl font-semibold">
-            <PrivacyValue value={totalCurrent} /> <span className="text-muted-foreground text-base">/</span>{' '}
-            <PrivacyValue value={totalTarget} />
-          </CardContent>
-        </Card>
-      </div>
+      {isLoading && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <Card key={index}>
+                <CardHeader className="space-y-0">
+                  <Skeleton className="h-5 w-32" />
+                  <Skeleton className="mt-1.5 h-3 w-24" />
+                </CardHeader>
+                <CardContent className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <Skeleton className="h-4 w-20" />
+                    <Skeleton className="h-4 w-20" />
+                  </div>
+                  <Skeleton className="h-2 w-full rounded-full" />
+                  <Skeleton className="h-3 w-24" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </>
+      )}
 
-      {isLoading && <p className="text-muted-foreground text-sm">Carregando metas...</p>}
-      {goals?.length === 0 && <p className="text-muted-foreground text-sm">Nenhuma meta criada ainda.</p>}
+      {isError && <PageError onRetry={() => refetch()} />}
+
+      {goals && !isError && (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-muted-foreground text-sm font-normal">Metas ativas</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold">{goals.length}</CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-muted-foreground text-sm font-normal">Total orçado vs gasto</CardTitle>
+            </CardHeader>
+            <CardContent className="text-2xl font-semibold">
+              <PrivacyValue value={totalCurrent} /> <span className="text-muted-foreground text-base">/</span>{' '}
+              <PrivacyValue value={totalTarget} />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {goals?.length === 0 && (
+        <EmptyState
+          icon={Target}
+          title="Crie sua primeira meta"
+          description="Defina limites de gasto ou objetivos de poupança e acompanhe o progresso mês a mês."
+          action={
+            <Button onClick={() => setDialogOpen(true)}>
+              <Plus className="size-4" />
+              Nova meta
+            </Button>
+          }
+        />
+      )}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {goals?.map((goal) => {
@@ -238,9 +282,9 @@ export function GoalsPage() {
                   <p className="text-muted-foreground text-xs">{TYPE_LABELS[goal.type]}</p>
                 </div>
                 <button
-                  className="text-muted-foreground hover:text-destructive"
-                  onClick={() => deleteGoal.mutate(goal.id)}
-                  aria-label="Excluir meta"
+                  className="text-muted-foreground hover:text-destructive focus-visible:ring-ring/50 -m-2.5 flex size-10 shrink-0 items-center justify-center rounded-md outline-none focus-visible:ring-[3px]"
+                  onClick={() => setGoalToDelete(goal)}
+                  aria-label={`Excluir meta ${goal.name}`}
                 >
                   <Trash2 className="size-4" />
                 </button>
@@ -248,7 +292,7 @@ export function GoalsPage() {
               <CardContent className="flex flex-col gap-2">
                 <div className="flex items-center justify-between text-sm">
                   <PrivacyValue value={goal.current_amount} />
-                  <span className="text-muted-foreground">{formatCurrency(goal.target_amount)}</span>
+                  <PrivacyValue value={goal.target_amount} className="text-muted-foreground" />
                 </div>
                 <div className="bg-muted h-2 w-full overflow-hidden rounded-full">
                   <div
@@ -264,6 +308,20 @@ export function GoalsPage() {
       </div>
 
       <NewGoalDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+
+      <ConfirmDialog
+        open={goalToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setGoalToDelete(null)
+        }}
+        title={goalToDelete ? `Excluir a meta "${goalToDelete.name}"?` : 'Excluir meta?'}
+        description="A meta e o histórico de progresso serão removidos. Esta ação não pode ser desfeita."
+        confirmLabel="Excluir meta"
+        onConfirm={() => {
+          if (goalToDelete) deleteGoal.mutate(goalToDelete.id)
+          setGoalToDelete(null)
+        }}
+      />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -10,6 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 
+import { ChartTooltip } from '@/components/charts/chart-tooltip'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -21,7 +22,7 @@ import {
   emergencyFund,
   financialIndependence,
 } from '@/lib/finance-calculators'
-import { cn } from '@/lib/utils'
+import { cn, formatCurrencyCompact } from '@/lib/utils'
 import type { CalculatorPrefillData } from '@/types/calculator'
 
 type Tab = 'compound' | 'emergency' | 'independence'
@@ -71,7 +72,10 @@ function CompoundInterestCalculator({ prefill }: { prefill?: CalculatorPrefillDa
   const saveGoal = useSaveAsGoal()
 
   const contribution = useRealData && prefill ? prefill.avg_monthly_savings : Number(monthlyContribution)
-  const result = compoundInterest(Number(principal), contribution, Number(annualRate), Number(months))
+  const result = useMemo(
+    () => compoundInterest(Number(principal), contribution, Number(annualRate), Number(months)),
+    [principal, contribution, annualRate, months],
+  )
 
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -132,11 +136,41 @@ function CompoundInterestCalculator({ prefill }: { prefill?: CalculatorPrefillDa
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={result.points}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="month" fontSize={12} />
-                <YAxis fontSize={12} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                <Area type="monotone" dataKey="value" stroke="#2a78d6" fill="#2a78d6" fillOpacity={0.2} />
+                <defs>
+                  <linearGradient id="calcFillValue" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--chart-1)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="var(--chart-1)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid stroke="var(--border)" strokeOpacity={0.5} vertical={false} />
+                <XAxis
+                  dataKey="month"
+                  stroke="var(--muted-foreground)"
+                  fontSize={12}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <YAxis
+                  stroke="var(--muted-foreground)"
+                  fontSize={12}
+                  tickFormatter={(v) => formatCurrencyCompact(Number(v))}
+                  width={48}
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <Tooltip
+                  cursor={{ stroke: 'var(--border)' }}
+                  content={<ChartTooltip labelFormatter={(m) => `Mês ${m}`} />}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  name="Valor acumulado"
+                  stroke="var(--chart-1)"
+                  strokeWidth={2.5}
+                  fill="url(#calcFillValue)"
+                  dot={false}
+                />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -321,7 +355,7 @@ export function CalculatorsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold">Calculadoras</h1>
+      <h1 className="font-display text-2xl font-medium tracking-tight">Calculadoras</h1>
 
       <div className="flex gap-2 border-b">
         {TABS.map((t) => (

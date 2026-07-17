@@ -1,9 +1,14 @@
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { Loader2, Printer, Sparkles } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { CalendarSearch, Loader2, Printer, Sparkles } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import Markdown from 'react-markdown'
-import { Bar, BarChart, CartesianGrid, Cell, Legend, Pie, PieChart, Tooltip, XAxis, YAxis } from 'recharts'
+import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
+import { ChartTooltip } from '@/components/charts/chart-tooltip'
+import { EmptyState } from '@/components/shared/empty-state'
+import { PageError } from '@/components/shared/page-error'
+import { ChartSkeleton, StatCardSkeleton } from '@/components/shared/page-skeleton'
+import { PrivacyValue } from '@/components/shared/privacy-value'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -13,26 +18,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
+import { downloadFile } from '@/lib/download'
+import { formatCurrency, formatCurrencyCompact, lastDayOfMonthISODate } from '@/lib/utils'
 import type { AIAnalysisJob, AIAnalysisStatus, MonthlyReport, YearlyReport } from '@/types/report'
 
 const CATEGORY_COLORS = [
-  '#2a78d6',
-  '#1baf7a',
-  '#eda100',
-  '#008300',
-  '#4a3aa7',
-  '#e34948',
-  '#e87ba4',
-  '#eb6834',
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
 ]
 
 const MONTH_NAMES = [
   'Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez',
 ]
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+      <span aria-hidden className="size-2 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  )
 }
 
 async function fetchMonthlyReport(year: number, month: number) {
@@ -45,13 +55,16 @@ async function fetchYearlyReport(year: number) {
   return data
 }
 
+const POLL_INTERVAL_MS = 2000
+const MAX_POLL_ATTEMPTS = 60
+
 export function ReportsPage() {
   const today = new Date()
+  const { toast } = useToast()
   const [year, setYear] = useState(today.getFullYear())
   const [month, setMonth] = useState(today.getMonth() + 1)
   const [jobId, setJobId] = useState<string | null>(null)
   const [analysisResult, setAnalysisResult] = useState<string | null>(null)
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const monthlyQuery = useQuery({
     queryKey: ['reports', 'monthly', year, month],
@@ -65,7 +78,7 @@ export function ReportsPage() {
   const requestAnalysis = useMutation({
     mutationFn: async () => {
       const periodStart = `${year}-${String(month).padStart(2, '0')}-01`
-      const periodEnd = new Date(year, month, 0).toISOString().slice(0, 10)
+      const periodEnd = lastDayOfMonthISODate(year, month)
       const { data } = await api.post<AIAnalysisJob>('/v1/reports/ai-analysis', {
         period_start: periodStart,
         period_end: periodEnd,
@@ -76,41 +89,69 @@ export function ReportsPage() {
       setJobId(data.job_id)
       setAnalysisResult(null)
     },
+    onError: () => {
+      toast({ variant: 'destructive', title: 'Não foi possível iniciar a análise' })
+    },
   })
 
   useEffect(() => {
     if (!jobId) return
 
-    pollRef.current = setInterval(async () => {
-      const { data } = await api.get<AIAnalysisStatus>(`/v1/reports/ai-analysis/${jobId}`)
-      if (data.status === 'SUCCESS' || data.status === 'FAILURE') {
-        setAnalysisResult(data.result ?? 'Não foi possível gerar a análise.')
+    let attempts = 0
+    let cancelled = false
+
+    const interval = setInterval(async () => {
+      attempts += 1
+      try {
+        const { data } = await api.get<AIAnalysisStatus>(`/v1/reports/ai-analysis/${jobId}`)
+        if (cancelled) return
+        if (data.status === 'SUCCESS' || data.status === 'FAILURE') {
+          setAnalysisResult(data.result ?? 'Não foi possível gerar a análise.')
+          setJobId(null)
+        } else if (attempts >= MAX_POLL_ATTEMPTS) {
+          setAnalysisResult('A análise demorou mais do que o esperado. Tente novamente.')
+          setJobId(null)
+        }
+      } catch {
+        if (cancelled) return
+        setAnalysisResult('Não foi possível consultar o status da análise. Tente novamente.')
         setJobId(null)
-        if (pollRef.current) clearInterval(pollRef.current)
       }
-    }, 2000)
+    }, POLL_INTERVAL_MS)
 
     return () => {
-      if (pollRef.current) clearInterval(pollRef.current)
+      cancelled = true
+      clearInterval(interval)
     }
   }, [jobId])
 
-  function handleExportCsv() {
+  async function handleExportCsv() {
     const periodStart = `${year}-${String(month).padStart(2, '0')}-01`
-    const periodEnd = new Date(year, month, 0).toISOString().slice(0, 10)
-    window.open(
-      `/api/v1/transactions/export-csv?date_from=${periodStart}&date_to=${periodEnd}`,
-      '_blank',
-    )
+    const periodEnd = lastDayOfMonthISODate(year, month)
+    try {
+      await downloadFile('/v1/transactions/export-csv', 'transacoes.csv', {
+        date_from: periodStart,
+        date_to: periodEnd,
+      })
+    } catch {
+      toast({ variant: 'destructive', title: 'Não foi possível exportar o CSV' })
+    }
   }
 
   const monthly = monthlyQuery.data
   const yearly = yearlyQuery.data
+  const isLoading = monthlyQuery.isLoading || yearlyQuery.isLoading
+  const isError = monthlyQuery.isError || yearlyQuery.isError
+  const monthHasData =
+    monthly !== undefined &&
+    (Number(monthly.total_income) !== 0 ||
+      Number(monthly.total_expenses) !== 0 ||
+      monthly.expenses_by_category.length > 0)
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-2 print:hidden">
-        <h1 className="text-2xl font-semibold">Relatórios</h1>
+        <h1 className="font-display text-2xl font-medium tracking-tight">Relatórios</h1>
         <div className="flex items-center gap-2">
           <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
             <SelectTrigger className="w-32">
@@ -146,25 +187,64 @@ export function ReportsPage() {
         </div>
       </div>
 
+      {isLoading && (
+        <>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+            <StatCardSkeleton />
+          </div>
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <ChartSkeleton />
+            <ChartSkeleton />
+          </div>
+        </>
+      )}
+
+      {isError && !isLoading && (
+        <PageError
+          onRetry={() => {
+            monthlyQuery.refetch()
+            yearlyQuery.refetch()
+          }}
+        />
+      )}
+
+      {!isLoading && !isError && !monthHasData && (
+        <EmptyState
+          icon={CalendarSearch}
+          title="Sem dados neste período"
+          description={`Nenhuma movimentação registrada em ${MONTH_NAMES[month - 1]} de ${year}. Selecione outro mês acima ou registre transações para gerar o relatório.`}
+        />
+      )}
+
+      {!isLoading && !isError && monthHasData && (
+        <>
       {monthly && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <Card>
             <CardHeader>
               <CardTitle className="text-muted-foreground text-sm font-normal">Receitas</CardTitle>
             </CardHeader>
-            <CardContent className="text-2xl font-semibold">{formatCurrency(monthly.total_income)}</CardContent>
+            <CardContent className="text-2xl font-semibold">
+              <PrivacyValue value={Number(monthly.total_income)} />
+            </CardContent>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-muted-foreground text-sm font-normal">Despesas</CardTitle>
             </CardHeader>
-            <CardContent className="text-2xl font-semibold">{formatCurrency(monthly.total_expenses)}</CardContent>
+            <CardContent className="text-2xl font-semibold">
+              <PrivacyValue value={Number(monthly.total_expenses)} />
+            </CardContent>
           </Card>
           <Card>
             <CardHeader>
               <CardTitle className="text-muted-foreground text-sm font-normal">Saldo líquido</CardTitle>
             </CardHeader>
-            <CardContent className="text-2xl font-semibold">{formatCurrency(monthly.net_balance)}</CardContent>
+            <CardContent className="text-2xl font-semibold">
+              <PrivacyValue value={Number(monthly.net_balance)} />
+            </CardContent>
           </Card>
         </div>
       )}
@@ -174,51 +254,86 @@ export function ReportsPage() {
           <CardHeader>
             <CardTitle>Despesas por categoria</CardTitle>
           </CardHeader>
-          <CardContent className="flex h-72 items-center justify-center">
+          <CardContent className="relative h-72">
             {monthly && monthly.expenses_by_category.length > 0 ? (
-              <PieChart width={320} height={280}>
-                <Pie
-                  data={monthly.expenses_by_category.map((c) => ({ ...c, amount: Number(c.amount) }))}
-                  dataKey="amount"
-                  nameKey="category"
-                  outerRadius={100}
-                  label={(props: { name?: string }) => props.name ?? ''}
-                >
-                  {monthly.expenses_by_category.map((entry, index) => (
-                    <Cell key={entry.category_id ?? index} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-              </PieChart>
+              <>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={monthly.expenses_by_category.map((c) => ({ ...c, amount: Number(c.amount) }))}
+                      dataKey="amount"
+                      nameKey="category"
+                      innerRadius="62%"
+                      outerRadius="88%"
+                      paddingAngle={2}
+                      stroke="var(--card)"
+                    >
+                      {monthly.expenses_by_category.map((entry, index) => (
+                        <Cell key={entry.category_id ?? index} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={<ChartTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-muted-foreground text-xs">Total</span>
+                  <PrivacyValue
+                    value={Number(monthly.total_expenses)}
+                    className="font-display text-xl font-medium"
+                  />
+                </div>
+              </>
             ) : (
-              <p className="text-muted-foreground text-sm">Sem despesas no período.</p>
+              <div className="flex h-full items-center justify-center">
+                <p className="text-muted-foreground text-sm">Sem despesas no período.</p>
+              </div>
             )}
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle>Comparativo mensal ({year})</CardTitle>
+            <div className="flex items-center gap-4">
+              <LegendDot color="var(--income)" label="Receitas" />
+              <LegendDot color="var(--expense)" label="Despesas" />
+            </div>
           </CardHeader>
           <CardContent className="h-72">
             {yearly && (
-              <BarChart
-                width={420}
-                height={280}
-                data={yearly.months.map((m) => ({
-                  ...m,
-                  income: Number(m.income),
-                  expenses: Number(m.expenses),
-                }))}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="month" tickFormatter={(m) => MONTH_NAMES[m - 1]} fontSize={12} />
-                <YAxis fontSize={12} tickFormatter={(v) => formatCurrency(v)} width={70} />
-                <Tooltip formatter={(value) => formatCurrency(Number(value))} />
-                <Legend />
-                <Bar dataKey="income" name="Receitas" fill="#16a34a" />
-                <Bar dataKey="expenses" name="Despesas" fill="#dc2626" />
-              </BarChart>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={yearly.months.map((m) => ({
+                    ...m,
+                    income: Number(m.income),
+                    expenses: Number(m.expenses),
+                  }))}
+                >
+                  <CartesianGrid stroke="var(--border)" strokeOpacity={0.5} vertical={false} />
+                  <XAxis
+                    dataKey="month"
+                    tickFormatter={(m) => MONTH_NAMES[m - 1]}
+                    stroke="var(--muted-foreground)"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="var(--muted-foreground)"
+                    fontSize={12}
+                    tickFormatter={(v) => formatCurrencyCompact(Number(v))}
+                    width={56}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <Tooltip
+                    cursor={{ fill: 'color-mix(in srgb, var(--muted) 60%, transparent)' }}
+                    content={<ChartTooltip labelFormatter={(m) => MONTH_NAMES[Number(m) - 1] ?? String(m)} />}
+                  />
+                  <Bar dataKey="income" name="Receitas" fill="var(--income)" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="expenses" name="Despesas" fill="var(--expense)" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </CardContent>
         </Card>
@@ -238,13 +353,7 @@ export function ReportsPage() {
               <div className="flex items-center gap-3">
                 <span>{formatCurrency(category.amount)}</span>
                 {category.vs_previous !== null && (
-                  <span
-                    className={
-                      category.vs_previous > 0
-                        ? 'text-red-600 dark:text-red-400'
-                        : 'text-green-600 dark:text-green-400'
-                    }
-                  >
+                  <span className={category.vs_previous > 0 ? 'tnum text-expense' : 'tnum text-income'}>
                     {category.vs_previous > 0 ? '+' : ''}
                     {category.vs_previous.toFixed(1)}%
                   </span>
@@ -280,6 +389,8 @@ export function ReportsPage() {
           )}
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   )
 }

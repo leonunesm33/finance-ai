@@ -1,10 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Loader2, Plug, RefreshCw, Trash2 } from 'lucide-react'
+import { Landmark, Loader2, Plug, RefreshCw, Trash2 } from 'lucide-react'
+import { useState } from 'react'
 
+import { ConfirmDialog } from '@/components/shared/confirm-dialog'
+import { EmptyState } from '@/components/shared/empty-state'
+import { PageError } from '@/components/shared/page-error'
+import { ListSkeleton } from '@/components/shared/page-skeleton'
 import { PrivacyValue } from '@/components/shared/privacy-value'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
 import { usePluggyConnect } from '@/hooks/use-pluggy-connect'
 import { useToast } from '@/hooks/use-toast'
 import { api } from '@/lib/api'
@@ -42,6 +48,7 @@ export function AccountsPage() {
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const { open: openPluggyWidget, loading: widgetLoading } = usePluggyConnect()
+  const [connectionToRemove, setConnectionToRemove] = useState<BankConnection | null>(null)
 
   const connectionsQuery = useQuery({ queryKey: ['open-finance', 'connections'], queryFn: fetchConnections })
   const accountsQuery = useQuery({ queryKey: ['bank-accounts'], queryFn: fetchAccounts })
@@ -97,11 +104,27 @@ export function AccountsPage() {
   }
 
   const summary = summaryQuery.data
+  const isError = summaryQuery.isError || connectionsQuery.isError || accountsQuery.isError
+
+  function retryAll() {
+    summaryQuery.refetch()
+    connectionsQuery.refetch()
+    accountsQuery.refetch()
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col gap-6">
+        <h1 className="font-display text-2xl font-medium tracking-tight">Contas</h1>
+        <PageError onRetry={retryAll} />
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Contas</h1>
+        <h1 className="font-display text-2xl font-medium tracking-tight">Contas</h1>
         <Button onClick={handleConnectBank} disabled={widgetLoading}>
           {widgetLoading ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
           Conectar banco
@@ -114,7 +137,11 @@ export function AccountsPage() {
             <CardTitle className="text-muted-foreground text-sm font-normal">Saldo total</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            <PrivacyValue value={summary?.total_balance ?? 0} />
+            {summaryQuery.isLoading ? (
+              <Skeleton className="h-8 w-28" />
+            ) : (
+              <PrivacyValue value={summary?.total_balance ?? 0} />
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -122,7 +149,11 @@ export function AccountsPage() {
             <CardTitle className="text-muted-foreground text-sm font-normal">Limite de cartão</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            <PrivacyValue value={summary?.total_credit_limit ?? 0} />
+            {summaryQuery.isLoading ? (
+              <Skeleton className="h-8 w-28" />
+            ) : (
+              <PrivacyValue value={summary?.total_credit_limit ?? 0} />
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -130,7 +161,11 @@ export function AccountsPage() {
             <CardTitle className="text-muted-foreground text-sm font-normal">Crédito disponível</CardTitle>
           </CardHeader>
           <CardContent className="text-2xl font-semibold">
-            <PrivacyValue value={summary?.total_credit_available ?? 0} />
+            {summaryQuery.isLoading ? (
+              <Skeleton className="h-8 w-28" />
+            ) : (
+              <PrivacyValue value={summary?.total_credit_available ?? 0} />
+            )}
           </CardContent>
         </Card>
       </div>
@@ -140,8 +175,19 @@ export function AccountsPage() {
           <CardTitle>Conexões bancárias</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {connectionsQuery.isLoading && <ListSkeleton rows={2} />}
           {connectionsQuery.data?.length === 0 && (
-            <p className="text-muted-foreground text-sm">Nenhum banco conectado ainda.</p>
+            <EmptyState
+              icon={Landmark}
+              title="Nenhum banco conectado"
+              description="Conecte sua conta via Open Finance para sincronizar saldos e transações automaticamente."
+              action={
+                <Button onClick={handleConnectBank} disabled={widgetLoading}>
+                  {widgetLoading ? <Loader2 className="size-4 animate-spin" /> : <Plug className="size-4" />}
+                  Conectar banco
+                </Button>
+              }
+            />
           )}
           {connectionsQuery.data?.map((connection) => (
             <div key={connection.id} className="flex items-center justify-between rounded-md border p-3">
@@ -173,8 +219,8 @@ export function AccountsPage() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Desconectar"
-                  onClick={() => disconnect.mutate(connection.id)}
+                  aria-label={`Desconectar ${connection.institution_name}`}
+                  onClick={() => setConnectionToRemove(connection)}
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -189,6 +235,7 @@ export function AccountsPage() {
           <CardTitle>Contas</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {accountsQuery.isLoading && <ListSkeleton rows={3} />}
           {accountsQuery.data?.length === 0 && (
             <p className="text-muted-foreground text-sm">Nenhuma conta sincronizada ainda.</p>
           )}
@@ -206,6 +253,24 @@ export function AccountsPage() {
           ))}
         </CardContent>
       </Card>
+
+      <ConfirmDialog
+        open={connectionToRemove !== null}
+        onOpenChange={(open) => {
+          if (!open) setConnectionToRemove(null)
+        }}
+        title={
+          connectionToRemove
+            ? `Desconectar ${connectionToRemove.institution_name}?`
+            : 'Desconectar banco?'
+        }
+        description="A conexão Open Finance será removida e as contas deste banco deixarão de sincronizar. Esta ação não pode ser desfeita."
+        confirmLabel="Desconectar"
+        onConfirm={() => {
+          if (connectionToRemove) disconnect.mutate(connectionToRemove.id)
+          setConnectionToRemove(null)
+        }}
+      />
     </div>
   )
 }

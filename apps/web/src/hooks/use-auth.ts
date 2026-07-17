@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import axios from 'axios'
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { api } from '@/lib/api'
@@ -16,46 +16,49 @@ async function fetchMe(): Promise<User> {
 export function useCurrentUser() {
   const accessToken = useAuthStore((state) => state.accessToken)
   const setUser = useAuthStore((state) => state.setUser)
-  const setHidden = usePrivacyStore((state) => state.setHidden)
+  const syncFromServer = usePrivacyStore((state) => state.syncFromServer)
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ['me'],
-    queryFn: async () => {
-      const user = await fetchMe()
-      setUser(user)
-      setHidden(user.privacy_mode)
-      return user
-    },
+    queryFn: fetchMe,
     enabled: Boolean(accessToken),
-    retry: (failureCount, error) => {
-      // 401 já passou pelo interceptor de refresh — tentar de novo não ajuda.
-      if (axios.isAxiosError(error) && error.response?.status === 401) return false
-      return failureCount < 2
-    },
   })
+
+  const user = query.data
+  useEffect(() => {
+    if (!user) return
+    setUser(user)
+    // Sincroniza o privacy_mode apenas no primeiro load do usuário,
+    // sem sobrescrever o toggle local a cada refetch.
+    syncFromServer(user.privacy_mode)
+  }, [user, setUser, syncFromServer])
+
+  return query
+}
+
+function applyTokenResponse(data: TokenResponse) {
+  const { setAccessToken, setUser } = useAuthStore.getState()
+  setAccessToken(data.access_token)
+  if (data.user) setUser(data.user)
 }
 
 export function useLogin() {
-  const setTokens = useAuthStore((state) => state.setTokens)
-
   return useMutation({
     mutationFn: async (payload: LoginPayload) => {
       const { data } = await api.post<TokenResponse>('/v1/auth/login', payload)
       return data
     },
-    onSuccess: (data) => setTokens(data.access_token, data.refresh_token),
+    onSuccess: applyTokenResponse,
   })
 }
 
 export function useRegister() {
-  const setTokens = useAuthStore((state) => state.setTokens)
-
   return useMutation({
     mutationFn: async (payload: RegisterPayload) => {
       const { data } = await api.post<TokenResponse>('/v1/auth/register', payload)
       return data
     },
-    onSuccess: (data) => setTokens(data.access_token, data.refresh_token),
+    onSuccess: applyTokenResponse,
   })
 }
 
@@ -65,17 +68,15 @@ export function useLogout() {
   const navigate = useNavigate()
 
   return async () => {
-    const { refreshToken } = useAuthStore.getState()
     clear()
     queryClient.clear()
     navigate('/login', { replace: true })
 
-    if (refreshToken) {
-      try {
-        await api.post('/v1/auth/logout', { refresh_token: refreshToken })
-      } catch {
-        // best-effort: sessão local já foi encerrada
-      }
+    try {
+      // O backend limpa o cookie httpOnly do refresh token.
+      await api.post('/v1/auth/logout')
+    } catch {
+      // best-effort: sessão local já foi encerrada
     }
   }
 }
