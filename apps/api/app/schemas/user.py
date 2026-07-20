@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 PASSWORD_MAX_LENGTH = 72
 
 AIPersonality = Literal["neutro", "direto", "motivador"]
+UserRole = Literal["user", "admin"]
 
 
 class UserCreate(BaseModel):
@@ -44,4 +45,38 @@ class UserResponse(BaseModel):
     ai_personality: str
     currency: str
     timezone: str
+    role: UserRole
+    is_active: bool
     created_at: datetime
+
+
+class UserWipeRequest(BaseModel):
+    current_password: str
+
+
+class UserWipeResult(BaseModel):
+    transactions_deleted: int
+    recurring_deleted: int
+    goals_deleted: int
+    investments_deleted: int
+    bank_accounts_deleted: int
+    bank_connections_deleted: int
+
+
+# ---------------------------------------------------------- administração
+
+class AdminUserCreate(BaseModel):
+    email: EmailStr
+    password: str = Field(min_length=8, max_length=PASSWORD_MAX_LENGTH)
+    name: str = Field(min_length=1, max_length=255)
+    role: UserRole = "user"
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class AdminUserUpdate(BaseModel):
+    role: UserRole | None = None
+    is_active: bool | None = None

@@ -19,7 +19,7 @@ from app.schemas.transaction import (
     TransactionParseResponse,
     TransactionUpdate,
 )
-from app.services.reconciliation_service import reconcile_transaction
+from app.services.reconciliation_service import find_duplicate_for_import
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
@@ -170,7 +170,7 @@ async def import_csv(
             skipped += 1
             continue
 
-        match = await reconcile_transaction(db, user.id, description, amount, tx_date)
+        match = await find_duplicate_for_import(db, user.id, description, amount, tx_date)
         if match is not None:
             reconciled += 1
             continue

@@ -76,3 +76,70 @@ def auth_a(user_a):
 @pytest.fixture(scope="session")
 def auth_b(user_b):
     return {"Authorization": f"Bearer {user_b['token']}"}
+
+
+def _promote_to_admin(email: str) -> None:
+    async def _promote(session):
+        from sqlalchemy import select
+
+        from app.models.user import User
+
+        user = await session.scalar(select(User).where(User.email == email))
+        user.role = "admin"
+        await session.commit()
+
+    run_db(_promote)
+
+
+def _make_admin(client) -> dict:
+    user = _register_and_login(client)
+    _promote_to_admin(user["email"])
+    me = client.get(f"{API}/users/me", headers={"Authorization": f"Bearer {user['token']}"})
+    user["id"] = me.json()["id"]
+    return user
+
+
+@pytest.fixture(scope="session")
+def admin_a(client):
+    return _make_admin(client)
+
+
+@pytest.fixture(scope="session")
+def admin_b(client):
+    return _make_admin(client)
+
+
+@pytest.fixture(scope="session")
+def auth_admin(admin_a):
+    return {"Authorization": f"Bearer {admin_a['token']}"}
+
+
+@pytest.fixture(scope="session")
+def auth_admin_b(admin_b):
+    return {"Authorization": f"Bearer {admin_b['token']}"}
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cleanup_test_users():
+    """Remove ao final da suíte todos os usuários de teste, em cascata, para o
+    banco não acumular lixo entre execuções. Cobre os 2 padrões de email
+    usados pelos testes: test-*@gmail.com (helper compartilhado) e
+    *@example.com (domínio reservado para testes, RFC 2606 — nenhum usuário
+    real usaria)."""
+    yield
+
+    async def _cleanup(session):
+        from sqlalchemy import or_, select
+
+        from app.models.user import User
+        from app.services.account_wipe_service import delete_user_completely
+
+        result = await session.scalars(
+            select(User.id).where(
+                or_(User.email.like("test-%@gmail.com"), User.email.like("%@example.com"))
+            )
+        )
+        for user_id in list(result.all()):
+            await delete_user_completely(session, user_id)
+
+    run_db(_cleanup)

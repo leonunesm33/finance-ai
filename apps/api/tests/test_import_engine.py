@@ -180,6 +180,72 @@ def test_commit_endpoint_cria_e_reconcilia(client, auth_a):
     assert body["created"] == 0 and body["reconciled"] == 1
 
 
+def test_commit_endpoint_nao_duplica_em_3a_reimportacao(client, auth_a):
+    """Regressão: reconcile_transaction (usada para casar sync do Open Finance
+    com lançamentos manuais) marca is_reconciled=True ao achar par — reutilizar
+    essa mesma função para deduplicar importações fazia o par "sumir" da busca
+    na 2ª reimportação, e uma 3ª reimportação do mesmo arquivo voltava a criar
+    duplicata. find_duplicate_for_import (não muta estado) corrige isso."""
+    import uuid as _uuid
+
+    desc = f"Import Repetido {_uuid.uuid4().hex[:8]}"
+    payload = {
+        "document_type": "extrato",
+        "transactions": [
+            {"date": "2026-07-11", "description": desc, "amount": "123.45", "type": "expense"},
+        ],
+    }
+
+    r1 = client.post(f"{API}/transactions/import/commit", headers=auth_a, json=payload)
+    assert r1.status_code == 200 and r1.json() == {"created": 1, "reconciled": 0, "skipped": 0}
+
+    r2 = client.post(f"{API}/transactions/import/commit", headers=auth_a, json=payload)
+    assert r2.status_code == 200 and r2.json() == {"created": 0, "reconciled": 1, "skipped": 0}
+
+    r3 = client.post(f"{API}/transactions/import/commit", headers=auth_a, json=payload)
+    assert r3.status_code == 200, r3.text
+    assert r3.json()["created"] == 0, "3ª reimportação criou duplicata — regressão do bug de is_reconciled"
+    assert r3.json()["reconciled"] == 1
+
+    # confirma no banco: só existe 1 transação com essa descrição, não 3
+    r = client.get(f"{API}/transactions/", headers=auth_a, params={"search": desc, "page_size": 10})
+    assert r.status_code == 200
+    assert r.json()["total"] == 1, f"esperado 1 transação, achou {r.json()['total']}"
+
+
+def test_import_csv_legado_nao_duplica_em_3a_reimportacao(client, auth_a):
+    """Mesma regressão do commit_import, mas no endpoint legado de mapeamento
+    manual de colunas (/transactions/import-csv)."""
+    import uuid as _uuid
+
+    desc = f"Legado Repetido {_uuid.uuid4().hex[:8]}"
+    csv_body = f"Data,Descricao,Valor\n2026-07-12,{desc},-88.90\n"
+
+    def _do_import():
+        return client.post(
+            f"{API}/transactions/import-csv",
+            headers=auth_a,
+            data={"date_column": "Data", "description_column": "Descricao", "amount_column": "Valor"},
+            files={"file": ("extrato.csv", io.BytesIO(csv_body.encode("utf-8")), "text/csv")},
+        )
+
+    r1 = _do_import()
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["created"] == 1
+
+    r2 = _do_import()
+    assert r2.status_code == 200
+    assert r2.json()["created"] == 0 and r2.json()["reconciled"] == 1
+
+    r3 = _do_import()
+    assert r3.status_code == 200
+    assert r3.json()["created"] == 0, "3ª reimportação (legado) criou duplicata"
+    assert r3.json()["reconciled"] == 1
+
+    r = client.get(f"{API}/transactions/", headers=auth_a, params={"search": desc, "page_size": 10})
+    assert r.json()["total"] == 1
+
+
 def test_import_exige_auth(client):
     r = client.post(f"{API}/transactions/import/preview")
     assert r.status_code == 401

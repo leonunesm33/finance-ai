@@ -4,7 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.schemas.user import UserPasswordUpdate, UserResponse, UserUpdate
+from app.schemas.user import (
+    UserPasswordUpdate,
+    UserResponse,
+    UserUpdate,
+    UserWipeRequest,
+    UserWipeResult,
+)
 from app.services import user_service
 
 router = APIRouter(prefix="/v1/users", tags=["users"])
@@ -31,3 +37,16 @@ async def update_password(
     db: AsyncSession = Depends(get_db),
 ):
     await user_service.update_password(db, current_user, data)
+
+
+@router.post("/me/wipe-financial-data", response_model=UserWipeResult)
+async def wipe_financial_data(
+    data: UserWipeRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apaga transações, recorrências, metas, investimentos e contas/conexões
+    bancárias do usuário logado. Irreversível — exige a senha atual.
+    Disponível para os 2 perfis (usuário e administrador), sempre restrito
+    aos próprios dados."""
+    return await user_service.wipe_financial_data(db, current_user, data)

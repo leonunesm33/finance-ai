@@ -23,7 +23,7 @@ from app.schemas.imports import (
     ImportPreviewResponse,
     ImportedTransaction,
 )
-from app.services.reconciliation_service import reconcile_transaction
+from app.services.reconciliation_service import find_duplicate_for_import
 
 logger = logging.getLogger(__name__)
 
@@ -390,7 +390,7 @@ def build_preview(filename: str, content: bytes) -> ImportPreviewResponse:
 async def commit_import(db: AsyncSession, user: User, data: ImportCommitRequest) -> ImportCommitResult:
     created = reconciled = 0
     for item in data.transactions:
-        match = await reconcile_transaction(db, user.id, item.description, item.amount, item.date)
+        match = await find_duplicate_for_import(db, user.id, item.description, item.amount, item.date)
         if match is not None:
             reconciled += 1
             continue

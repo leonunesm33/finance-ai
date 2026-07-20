@@ -39,3 +39,25 @@ docker-compose up -d --build
 - SSE do chat com `proxy_buffering off` (streaming real).
 - Containers da API rodam como usuário não-root (uid 1000).
 - CSP em produção liberando apenas a Pluggy (cdn/connect/api.pluggy.ai).
+
+## Níveis de acesso
+
+Dois papéis: `user` (todos os recursos + gestão da própria conta) e `admin`
+(mesmos acessos + `/api/v1/admin/users`: criar, bloquear/desbloquear,
+promover/rebaixar e remover usuários — com cascata de dados na remoção).
+Guard rails: um admin nunca gerencia a própria conta por essa rota (usa
+Configurações normalmente) e o sistema nunca fica sem nenhum admin ativo.
+
+- O admin seedado via `ADMIN_EMAIL`/`ADMIN_PASSWORD` (`python -m app.scripts.seed`)
+  já nasce com `role=admin`. Para promover outra conta, use o painel
+  Administração (ou uma query direta: `UPDATE users SET role='admin' WHERE email = '...'`).
+- **Limpar todas as informações financeiras** (`POST /api/v1/users/me/wipe-financial-data`,
+  disponível nas Configurações para os 2 perfis, exige a senha atual): apaga
+  transações, recorrências, metas, investimentos e contas/conexões bancárias
+  do próprio usuário; preserva categorias, perfil e histórico de chat — para
+  recomeçar as importações do zero sem perder a taxonomia de categorias.
+- Importação de arquivos (CSV/XLS/XLSX/PDF) é idempotente: reimportar o mesmo
+  extrato/fatura qualquer número de vezes reconcilia os lançamentos já
+  existentes em vez de duplicar (correção aplicada em 2026-07-21 — a função
+  de reconciliação usada aqui não muta estado, ao contrário da usada pelo
+  sync do Open Finance).

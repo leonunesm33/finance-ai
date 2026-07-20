@@ -1,8 +1,9 @@
 import { BrowserRouter, Route, Routes } from 'react-router-dom'
 
 import { AppLayout } from '@/components/shared/app-layout'
-import { ProtectedRoute } from '@/components/shared/protected-route'
+import { AdminRoute, ProtectedRoute } from '@/components/shared/protected-route'
 import { AccountsPage } from '@/pages/AccountsPage'
+import { AdminUsersPage } from '@/pages/AdminUsersPage'
 import { CalculatorsPage } from '@/pages/CalculatorsPage'
 import { ChatPage } from '@/pages/ChatPage'
 import { DashboardPage } from '@/pages/DashboardPage'
@@ -34,6 +35,10 @@ function App() {
             <Route path="/investments" element={<InvestmentsPage />} />
             <Route path="/health" element={<HealthPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+
+            <Route element={<AdminRoute />}>
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

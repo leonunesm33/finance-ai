@@ -1,4 +1,5 @@
 export type AIPersonality = 'neutro' | 'direto' | 'motivador'
+export type UserRole = 'user' | 'admin'
 
 export interface User {
   id: string
@@ -9,5 +10,7 @@ export interface User {
   ai_personality: AIPersonality
   currency: string
   timezone: string
+  role: UserRole
+  is_active: boolean
   created_at: string
 }

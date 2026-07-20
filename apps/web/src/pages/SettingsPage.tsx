@@ -1,13 +1,22 @@
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
-import { useEffect } from 'react'
+import { AlertTriangle, Trash2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 
 import { PageError } from '@/components/shared/page-error'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Label } from '@/components/ui/label'
@@ -217,6 +226,206 @@ function PasswordForm() {
   )
 }
 
+interface WipeFinancialDataResult {
+  transactions_deleted: number
+  recurring_deleted: number
+  goals_deleted: number
+  investments_deleted: number
+  bank_accounts_deleted: number
+  bank_connections_deleted: number
+}
+
+const wipeSchema = z.object({
+  current_password: z.string().min(1, 'Informe sua senha atual'),
+})
+
+type WipeFormValues = z.infer<typeof wipeSchema>
+
+function pluralize(count: number, singular: string, plural: string) {
+  return `${count} ${count === 1 ? singular : plural}`
+}
+
+/** Monta a frase de resumo do que foi apagado, ex.: "42 transações, 2 metas removidos". */
+function formatWipeSummary(result: WipeFinancialDataResult) {
+  const parts: string[] = []
+  if (result.transactions_deleted > 0) {
+    parts.push(pluralize(result.transactions_deleted, 'transação', 'transações'))
+  }
+  if (result.recurring_deleted > 0) {
+    parts.push(pluralize(result.recurring_deleted, 'recorrência', 'recorrências'))
+  }
+  if (result.goals_deleted > 0) {
+    parts.push(pluralize(result.goals_deleted, 'meta', 'metas'))
+  }
+  if (result.investments_deleted > 0) {
+    parts.push(pluralize(result.investments_deleted, 'investimento', 'investimentos'))
+  }
+  if (result.bank_accounts_deleted > 0) {
+    parts.push(pluralize(result.bank_accounts_deleted, 'conta bancária', 'contas bancárias'))
+  }
+  if (result.bank_connections_deleted > 0) {
+    parts.push(
+      pluralize(result.bank_connections_deleted, 'conexão bancária', 'conexões bancárias'),
+    )
+  }
+
+  return parts.length > 0 ? `${parts.join(', ')} removidos.` : 'Nenhum dado financeiro encontrado para remover.'
+}
+
+function WipeDataDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}) {
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setError,
+    watch,
+    formState: { errors },
+  } = useForm<WipeFormValues>({ resolver: zodResolver(wipeSchema), defaultValues: { current_password: '' } })
+
+  const passwordFilled = Boolean(watch('current_password'))
+
+  const wipeData = useMutation({
+    mutationFn: async (payload: WipeFormValues) => {
+      const { data } = await api.post<WipeFinancialDataResult>(
+        '/v1/users/me/wipe-financial-data',
+        payload,
+      )
+      return data
+    },
+    onSuccess: (result) => {
+      // Preserva categorias, perfil e conversas do assistente — só os dados financeiros somem.
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['reports'] })
+      queryClient.invalidateQueries({ queryKey: ['goals'] })
+      queryClient.invalidateQueries({ queryKey: ['investments'] })
+      queryClient.invalidateQueries({ queryKey: ['bank-accounts'] })
+      queryClient.invalidateQueries({ queryKey: ['open-finance'] })
+      queryClient.invalidateQueries({ queryKey: ['recurring'] })
+
+      toast({ title: 'Dados financeiros removidos', description: formatWipeSummary(result) })
+      reset()
+      onOpenChange(false)
+    },
+    onError: (error) => {
+      const detail = axios.isAxiosError<{ detail?: string }>(error)
+        ? error.response?.data?.detail
+        : undefined
+
+      // Erro de senha errada vira erro de validação no próprio campo, não só um toast genérico.
+      if (error && axios.isAxiosError(error) && error.response?.status === 400 && detail) {
+        setError('current_password', { message: detail })
+        return
+      }
+
+      toast({
+        variant: 'destructive',
+        title: 'Não foi possível limpar os dados',
+        description: detail ?? 'Tente novamente mais tarde.',
+      })
+    },
+  })
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) reset()
+        onOpenChange(next)
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Limpar todas as informações financeiras</DialogTitle>
+          <DialogDescription asChild>
+            <div className="flex flex-col gap-2 text-left">
+              <p>
+                Isso apaga permanentemente <strong>transações, recorrências, metas,
+                investimentos e contas/conexões bancárias</strong> da sua conta.
+              </p>
+              <p>
+                Suas <strong>categorias, dados de perfil e conversas com o assistente</strong> são
+                preservados.
+              </p>
+              <p className="text-destructive font-medium">Esta ação não pode ser desfeita.</p>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+
+        <form
+          className="flex flex-col gap-4"
+          onSubmit={handleSubmit((values) => wipeData.mutate(values))}
+        >
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="wipe-current-password">Senha atual</Label>
+            <Input
+              id="wipe-current-password"
+              type="password"
+              autoComplete="current-password"
+              {...register('current_password')}
+            />
+            {errors.current_password && (
+              <p className="text-destructive text-sm">{errors.current_password.message}</p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                reset()
+                onOpenChange(false)
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit" variant="destructive" disabled={wipeData.isPending || !passwordFilled}>
+              {wipeData.isPending ? 'Limpando...' : 'Limpar tudo'}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function DangerZoneCard() {
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  return (
+    <Card className="border-destructive/40">
+      <CardHeader>
+        <CardTitle className="text-destructive flex items-center gap-2">
+          <AlertTriangle className="size-4" />
+          Zona de perigo
+        </CardTitle>
+        <CardDescription>
+          Apague todas as suas transações, recorrências, metas, investimentos e contas/conexões
+          bancárias. Categorias, perfil e conversas com o assistente são preservados.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Button variant="destructive" onClick={() => setDialogOpen(true)}>
+          <Trash2 className="size-4" />
+          Limpar todas as informações financeiras
+        </Button>
+      </CardContent>
+
+      <WipeDataDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+    </Card>
+  )
+}
+
 export function SettingsPage() {
   const { data: user, isLoading, isError, refetch } = useCurrentUser()
 
@@ -237,8 +446,8 @@ export function SettingsPage() {
     return (
       <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <h1 className="font-display text-2xl font-medium tracking-tight">Configurações</h1>
-        {/* Espelha os dois cards de formulário (perfil e senha). */}
-        {Array.from({ length: 2 }).map((_, index) => (
+        {/* Espelha os três cards de formulário (perfil, senha e zona de perigo). */}
+        {Array.from({ length: 3 }).map((_, index) => (
           <Card key={index}>
             <CardHeader>
               <Skeleton className="h-5 w-32" />
@@ -266,6 +475,7 @@ export function SettingsPage() {
       <h1 className="font-display text-2xl font-medium tracking-tight">Configurações</h1>
       <ProfileForm user={user} />
       <PasswordForm />
+      <DangerZoneCard />
     </div>
   )
 }

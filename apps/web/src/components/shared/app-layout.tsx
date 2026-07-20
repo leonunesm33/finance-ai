@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { useCurrentUser } from '@/hooks/use-auth'
 import { cn } from '@/lib/utils'
+import { useAuthStore } from '@/stores/authStore'
 import { usePrivacyStore } from '@/stores/usePrivacyStore'
 
 import { CommandPalette } from './command-palette'
@@ -13,10 +14,20 @@ import { NAV_ITEMS } from './nav-items'
 import { ThemeToggle } from './theme-toggle'
 import { UserMenu } from './user-menu'
 
-function Sidebar({ collapsed, onNavigate }: { collapsed: boolean; onNavigate?: () => void }) {
+function Sidebar({
+  collapsed,
+  onNavigate,
+  isAdmin,
+}: {
+  collapsed: boolean
+  onNavigate?: () => void
+  isAdmin: boolean
+}) {
+  const items = NAV_ITEMS.filter((item) => !item.adminOnly || isAdmin)
+
   return (
     <nav className="flex flex-col gap-1 p-2">
-      {NAV_ITEMS.map((item) => (
+      {items.map((item) => (
         <NavLink
           key={item.path}
           to={item.path}
@@ -43,6 +54,7 @@ export function AppLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const { hidden, toggle } = usePrivacyStore()
+  const isAdmin = useAuthStore((state) => state.user?.role === 'admin')
   useCurrentUser()
 
   return (
@@ -59,7 +71,7 @@ export function AppLayout() {
             <span className="font-display text-lg font-medium tracking-tight">FinanceAI</span>
           )}
         </div>
-        <Sidebar collapsed={collapsed} />
+        <Sidebar collapsed={collapsed} isAdmin={isAdmin} />
       </aside>
 
       <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
@@ -69,7 +81,7 @@ export function AppLayout() {
             FinanceAI
           </SheetTitle>
           {/* onNavigate fecha o Sheet ao ativar um link, inclusive via teclado. */}
-          <Sidebar collapsed={false} onNavigate={() => setMobileNavOpen(false)} />
+          <Sidebar collapsed={false} onNavigate={() => setMobileNavOpen(false)} isAdmin={isAdmin} />
         </SheetContent>
       </Sheet>
 

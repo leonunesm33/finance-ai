@@ -8,6 +8,7 @@ from app.core.database import engine
 from app.core.logging import JSONLoggingMiddleware
 from app.core.redis import redis_client
 from app.routers import (
+    admin,
     auth,
     bank_accounts,
     calculators,
@@ -60,6 +61,7 @@ def create_app() -> FastAPI:
     app.include_router(reports.router, prefix="/api")
     app.include_router(calculators.router, prefix="/api")
     app.include_router(investments.router, prefix="/api")
+    app.include_router(admin.router, prefix="/api")
 
     return app
 

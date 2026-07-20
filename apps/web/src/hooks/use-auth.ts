@@ -62,6 +62,11 @@ export function useRegister() {
   })
 }
 
+/** Deriva o papel do usuário logado a partir do store (sem refetch). */
+export function useIsAdmin() {
+  return useAuthStore((state) => state.user?.role === 'admin')
+}
+
 export function useLogout() {
   const clear = useAuthStore((state) => state.clear)
   const queryClient = useQueryClient()

@@ -37,3 +37,19 @@ export function ProtectedRoute() {
 
   return <Outlet />
 }
+
+/**
+ * Guarda de UX para rotas administrativas: o backend já bloqueia de verdade
+ * (403 sem role=admin), isso só evita mostrar a página a um usuário comum
+ * que navegue direto pela URL. Sem `user` carregado ainda, deixa passar
+ * (o AppLayout dispara o fetch de /users/me em seguida).
+ */
+export function AdminRoute() {
+  const user = useAuthStore((state) => state.user)
+
+  if (user && user.role !== 'admin') {
+    return <Navigate to="/" replace />
+  }
+
+  return <Outlet />
+}
