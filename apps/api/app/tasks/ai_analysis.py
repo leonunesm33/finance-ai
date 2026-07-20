@@ -51,7 +51,7 @@ async def _run_analysis(user_id: str, period_start: str, period_end: str) -> str
         ANALYSIS_SYSTEM_PROMPT,
         json.dumps(context, ensure_ascii=False),
         model=settings.AI_ANALYSIS_MODEL,
-        max_tokens=4096,
+        max_tokens=2048,
     )
 
 

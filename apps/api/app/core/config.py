@@ -66,11 +66,13 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
-    # Modelos por tarefa (defaults pensados para o OpenRouter; para outro
-    # provedor, defina explicitamente no .env)
-    AI_CHAT_MODEL: str = "anthropic/claude-sonnet-4.5"
-    AI_PARSE_MODEL: str = "anthropic/claude-haiku-4.5"
-    AI_ANALYSIS_MODEL: str = "anthropic/claude-sonnet-4.5"
+    # Modelos por tarefa. Default: modelo GRATUITO da OpenRouter (custo $0),
+    # para funcionar de fábrica só com uma API key, sem crédito. Com crédito
+    # na conta, troque por um modelo pago (ex.: anthropic/claude-sonnet-4.5)
+    # para mais qualidade — para outro provedor, defina explicitamente no .env.
+    AI_CHAT_MODEL: str = "openai/gpt-oss-20b:free"
+    AI_PARSE_MODEL: str = "openai/gpt-oss-20b:free"
+    AI_ANALYSIS_MODEL: str = "openai/gpt-oss-20b:free"
 
     @property
     def ai_enabled(self) -> bool:
