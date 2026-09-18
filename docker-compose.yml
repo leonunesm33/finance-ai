@@ -1,7 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: financeai-postgres
+    container_name: finance-ai-postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-financeai}
@@ -21,7 +21,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    container_name: financeai-redis
+    container_name: finance-ai-redis
     restart: unless-stopped
     volumes:
       - redis_data:/data
@@ -37,7 +37,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: financeai-api
+    container_name: finance-ai-api
     restart: unless-stopped
     env_file:
       - .env
@@ -57,7 +57,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: financeai-worker
+    container_name: finance-ai-worker
     restart: unless-stopped
     command: celery -A app.core.celery_app worker --loglevel=info
     env_file:
@@ -76,7 +76,7 @@ services:
     build:
       context: ./apps/api
       dockerfile: Dockerfile
-    container_name: financeai-beat
+    container_name: finance-ai-beat
     restart: unless-stopped
     command: celery -A app.core.celery_app beat --loglevel=info
     env_file:
@@ -95,7 +95,7 @@ services:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
-    container_name: financeai-web
+    container_name: finance-ai-web
     restart: unless-stopped
     depends_on:
       - api
@@ -109,7 +109,7 @@ services:
 
   nginx:
     image: nginx:1.27-alpine
-    container_name: financeai-nginx
+    container_name: finance-ai-nginx
     restart: unless-stopped
     depends_on:
       - api
